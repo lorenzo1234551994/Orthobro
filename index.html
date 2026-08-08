@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orthoguide</title>
+
+<!-- ===== PWA — non toccare ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F766E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Orthoguide">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<meta property="og:title" content="Orthoguide">
+<meta property="og:description" content="Guida ortopedica basata sull'evidenza, consultabile anche offline.">
+<meta property="og:type" content="website">
+<!-- ===== fine blocco PWA ===== -->
+
+<style>
+  :root { --teal:#0F766E; --deep:#0B3B3C; --mint:#80deb9; --ink:#1a1a1a; }
+  * { box-sizing:border-box; }
+  body { margin:0; color:var(--ink); background:#fff;
+         font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { background:linear-gradient(160deg,var(--deep),var(--teal));
+           color:#fff; padding:56px 24px 44px; text-align:center; }
+  header h1 { margin:0 0 8px; font-size:30px; letter-spacing:-.4px; }
+  header p { margin:0; color:var(--mint); font-size:15px; }
+  main { max-width:720px; margin:0 auto; padding:32px 24px 120px; }
+  .note { border-left:4px solid var(--teal); background:#f4faf9;
+          padding:16px 20px; border-radius:0 8px 8px 0; }
+  .note code { background:#fff; padding:2px 6px; border-radius:4px; font-size:14px; }
+  footer { border-top:1px solid #eee; padding:24px; text-align:center;
+           font-size:13px; color:#777; }
+  footer a { color:var(--teal); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Orthoguide</h1>
+  <p>Evidenza ortopedica, sempre con te</p>
+</header>
+
+<main>
+  <div class="note">
+    <strong>Questo è un file segnaposto.</strong>
+    Sostituisci tutto ciò che sta tra <code>&lt;body&gt;</code> e la fine dei contenuti
+    con l'HTML reale di Orthoguide, <em>lasciando intatti</em> il blocco PWA
+    nell'<code>&lt;head&gt;</code> e il blocco script in fondo alla pagina.
+  </div>
+</main>
+
+<footer>
+  Orthoguide non è un dispositivo medico e non fornisce diagnosi o trattamenti.<br>
+  <a href="privacy.html">Informativa sulla privacy</a>
+</footer>
+
+
+<!-- ================================================================
+     KIT PWA — non toccare. Deve restare l'ultima cosa prima di </body>
+     ================================================================ -->
+<style>
+  .pp-fab{position:fixed;right:16px;bottom:16px;z-index:9998;padding:13px 20px;
+    border:0;border-radius:999px;cursor:pointer;background:#0F766E;color:#fff;
+    font:600 15px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    box-shadow:0 6px 20px rgba(0,0,0,.28);display:flex;align-items:center;gap:8px}
+  .pp-fab[hidden]{display:none}
+  .pp-veil{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);
+    display:flex;align-items:flex-end;justify-content:center}
+  .pp-veil[hidden]{display:none}
+  .pp-sheet{background:#fff;width:100%;max-width:460px;border-radius:18px 18px 0 0;
+    padding:26px 24px 34px;
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:#1a1a1a;animation:pp-up .28s ease}
+  @keyframes pp-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .pp-sheet h3{margin:0 0 6px;font-size:19px}
+  .pp-sheet p{margin:0 0 18px;color:#555;font-size:14px}
+  .pp-sheet ol{margin:0;padding-left:22px}
+  .pp-sheet li{margin-bottom:10px}
+  .pp-close{margin-top:22px;width:100%;padding:13px;border:0;border-radius:11px;
+    background:#0F766E;color:#fff;font:600 15px/1 inherit;cursor:pointer}
+  .pp-ico{display:inline-block;vertical-align:-3px;width:17px;height:17px}
+  .pp-toast{position:fixed;left:16px;right:16px;bottom:16px;z-index:9997;
+    max-width:460px;margin:0 auto;background:#1a1a1a;color:#fff;border-radius:12px;
+    padding:14px 16px;display:flex;align-items:center;gap:12px;
+    font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    box-shadow:0 6px 24px rgba(0,0,0,.3)}
+  .pp-toast[hidden]{display:none}
+  .pp-toast button{margin-left:auto;flex-shrink:0;border:0;border-radius:8px;
+    padding:9px 14px;background:#80deb9;color:#0B3B3C;font:600 14px/1 inherit;cursor:pointer}
+  .pp-offline{position:fixed;top:0;left:0;right:0;z-index:9996;background:#8a5a00;
+    color:#fff;text-align:center;padding:7px 12px;
+    font:600 13px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .pp-offline[hidden]{display:none}
+</style>
+
+<div class="pp-offline" id="ppOffline" hidden>
+  Sei offline — stai consultando i contenuti salvati sul dispositivo
+</div>
+
+<button class="pp-fab" id="ppInstall" hidden>
+  <svg class="pp-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v12M7 11l5 5 5-5M4 20h16"/>
+  </svg>
+  Installa app
+</button>
+
+<div class="pp-veil" id="ppIosVeil" hidden>
+  <div class="pp-sheet">
+    <h3>Aggiungi Orthoguide alla schermata Home</h3>
+    <p>Su iPhone e iPad l'installazione si fa da Safari in due passaggi.</p>
+    <ol>
+      <li>Tocca il pulsante <strong>Condividi</strong> nella barra di Safari
+          (il quadrato con la freccia verso l'alto).</li>
+      <li>Scorri e scegli <strong>Aggiungi a Home</strong>, poi tocca
+          <strong>Aggiungi</strong> in alto a destra.</li>
+    </ol>
+    <button class="pp-close" id="ppIosClose">Ho capito</button>
+  </div>
+</div>
+
+<div class="pp-toast" id="ppUpdate" hidden>
+  <span>È disponibile una versione aggiornata dei contenuti.</span>
+  <button id="ppReload">Aggiorna</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var installBtn = $('ppInstall'), iosVeil = $('ppIosVeil');
+  var updateBar = $('ppUpdate'), offlineBar = $('ppOffline');
+
+  var ua = window.navigator.userAgent;
+  var isIOS = /iPad|iPhone|iPod/.test(ua) ||
+              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                     window.navigator.standalone === true;
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').then(function (reg) {
+        function offerUpdate(worker) {
+          if (!worker) return;
+          updateBar.hidden = false;
+          $('ppReload').onclick = function () {
+            worker.postMessage({ type: 'SKIP_WAITING' });
+          };
+        }
+        if (reg.waiting) offerUpdate(reg.waiting);
+        reg.addEventListener('updatefound', function () {
+          var nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', function () {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              offerUpdate(nw);
+            }
+          });
+        });
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') reg.update();
+        });
+      }).catch(function (e) { console.error('SW non registrato:', e); });
+
+      var reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
+    });
+  }
+
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    if (!isStandalone) installBtn.hidden = false;
+  });
+
+  installBtn.addEventListener('click', function () {
+    if (deferred) {
+      deferred.prompt();
+      deferred.userChoice.then(function () {
+        deferred = null; installBtn.hidden = true;
+      });
+    } else if (isIOS) {
+      iosVeil.hidden = false;
+    }
+  });
+
+  $('ppIosClose').addEventListener('click', function () { iosVeil.hidden = true; });
+  iosVeil.addEventListener('click', function (e) {
+    if (e.target === iosVeil) iosVeil.hidden = true;
+  });
+
+  if (isIOS && !isStandalone) {
+    setTimeout(function () { installBtn.hidden = false; }, 2500);
+  }
+
+  window.addEventListener('appinstalled', function () {
+    installBtn.hidden = true; deferred = null;
+  });
+
+  function syncNetwork() { offlineBar.hidden = navigator.onLine; }
+  window.addEventListener('online', syncNetwork);
+  window.addEventListener('offline', syncNetwork);
+  syncNetwork();
+})();
+</script>
+
+</body>
+</html>
