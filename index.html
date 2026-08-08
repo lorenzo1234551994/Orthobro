@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Orthoguide</title>
+<meta name="description" content="Linee guida ortopediche e protocolli riabilitativi basati sull'evidenza, consultabili anche offline.">
 
-<!-- ===== PWA — non toccare ===== -->
+<!-- ===== PWA — non modificare ===== -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0F766E">
 <meta name="mobile-web-app-capable" content="yes">
@@ -15,52 +16,52 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <meta property="og:title" content="Orthoguide">
-<meta property="og:description" content="Guida ortopedica basata sull'evidenza, consultabile anche offline.">
+<meta property="og:description" content="Linee guida ortopediche e protocolli riabilitativi, consultabili anche offline.">
 <meta property="og:type" content="website">
 <!-- ===== fine blocco PWA ===== -->
 
 <style>
-  :root { --teal:#0F766E; --deep:#0B3B3C; --mint:#80deb9; --ink:#1a1a1a; }
-  * { box-sizing:border-box; }
-  body { margin:0; color:var(--ink); background:#fff;
-         font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-  header { background:linear-gradient(160deg,var(--deep),var(--teal));
-           color:#fff; padding:56px 24px 44px; text-align:center; }
-  header h1 { margin:0 0 8px; font-size:30px; letter-spacing:-.4px; }
-  header p { margin:0; color:var(--mint); font-size:15px; }
-  main { max-width:720px; margin:0 auto; padding:32px 24px 120px; }
-  .note { border-left:4px solid var(--teal); background:#f4faf9;
-          padding:16px 20px; border-radius:0 8px 8px 0; }
-  .note code { background:#fff; padding:2px 6px; border-radius:4px; font-size:14px; }
-  footer { border-top:1px solid #eee; padding:24px; text-align:center;
-           font-size:13px; color:#777; }
-  footer a { color:var(--teal); }
+  html, body { margin:0; padding:0; }
+  body { background:#F1F5F9; -webkit-text-size-adjust:100%; }
+
+  /* Schermata di caricamento, sostituita dall'app appena è pronta */
+  #boot { position:fixed; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px; background:#0B3B3C;
+    color:#fff; font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    z-index:10000; transition:opacity .35s ease; }
+  #boot.off { opacity:0; pointer-events:none; }
+  #boot .ring { width:44px; height:44px; border-radius:50%;
+    border:3px solid rgba(255,255,255,.22); border-top-color:#80deb9;
+    animation:spin .9s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #boot small { color:#80deb9; letter-spacing:.5px; }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Orthoguide</h1>
-  <p>Evidenza ortopedica, sempre con te</p>
-</header>
+<div id="boot">
+  <div class="ring"></div>
+  <small>Orthoguide</small>
+</div>
 
-<main>
-  <div class="note">
-    <strong>Questo è un file segnaposto.</strong>
-    Sostituisci tutto ciò che sta tra <code>&lt;body&gt;</code> e la fine dei contenuti
-    con l'HTML reale di Orthoguide, <em>lasciando intatti</em> il blocco PWA
-    nell'<code>&lt;head&gt;</code> e il blocco script in fondo alla pagina.
-  </div>
-</main>
+<div id="root"></div>
 
-<footer>
-  Orthoguide non è un dispositivo medico e non fornisce diagnosi o trattamenti.<br>
-  <a href="privacy.html">Informativa sulla privacy</a>
-</footer>
+<!-- React incluso nel progetto: nessuna CDN, funziona anche offline -->
+<script src="react.js"></script>
+<script src="react-dom.js"></script>
+<script src="app.js"></script>
+<script>
+  (function () {
+    var boot = document.getElementById('boot');
+    function hide() { boot.classList.add('off'); setTimeout(function(){ boot.remove(); }, 400); }
+    if (document.getElementById('root').childNodes.length) hide();
+    else setTimeout(hide, 300);
+  })();
+</script>
 
 
 <!-- ================================================================
-     KIT PWA — non toccare. Deve restare l'ultima cosa prima di </body>
+     KIT PWA — deve restare l'ultima cosa prima di </body>
      ================================================================ -->
 <style>
   .pp-fab{position:fixed;right:16px;bottom:16px;z-index:9998;padding:13px 20px;
