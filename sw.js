@@ -1,11 +1,11 @@
 /* Orthoguide — Service Worker
    ------------------------------------------------------------------
    IMPORTANTE: a ogni modifica dei contenuti cambia CACHE_VERSION
-   (orthoguide-v1 -> orthoguide-v2 -> ...). È così che a chi ha già
+   (orthoguide-v6 -> orthoguide-v2 -> ...). È così che a chi ha già
    l'app installata compare l'avviso "Aggiorna".
    ------------------------------------------------------------------ */
 
-const CACHE_VERSION = 'orthoguide-v1';
+const CACHE_VERSION = 'orthoguide-v6';
 
 const PRECACHE = [
   './',

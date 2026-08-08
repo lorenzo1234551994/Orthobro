@@ -59,6 +59,20 @@ const guidelines = [{
     content: ["FONTE: South Shore Hospital Orthopedic, Spine and Sports Therapy — Hip OA Rehabilitation Protocol (southshoreorthopedics.com). La progressione tra fasi è individuale e basata sulla valutazione clinica del fisioterapista.", "FILOSOFIA: il fisioterapista valuta mobilità, flessibilità e forza per identificare i deficit che aumentano lo stress sull'articolazione dolorosa; include esercizi di rinforzo/stretching anca-ginocchio-core, terapia manuale per migliorare mobilità articolare e ridurre il dolore.", "─── FASE 1 — FASE ACUTA/INFIAMMATORIA ───", "OBIETTIVI: controllo dolore e infiammazione; ripristino ROM articolare indolore; avvio programma flessibilità", "ESERCIZI: heel slides (in arco indolore); rotazione interna/esterna anca supina; bridging gentile; stretching arto inferiore (retto femorale/iliopsoas, IT band/TFL, hamstring, rotatori dell'anca, piriforme, gluteo massimo); cyclette se ROM indolore", "DOSAGGIO FASE 1: ROM quotidianamente — 2-3 serie x 15-20 rip; stretching quotidiano — 2-3 ripetizioni da 30 secondi per ogni posizione; terapia manuale", "─── FASE 2 — FASE SUBACUTA A ───", "OBIETTIVI: protezione articolazione; progressione flessibilità; inizio rinforzo in catena aperta nelle aree di debolezza/instabilità", "ESERCIZI: continuare ROM e flessibilità fase 1; cyclette (progressione lenta della resistenza); rinforzo in catena aperta (OKC): bridging, quadrupedie, SLR (sollevamento gamba tesa), abduzione anca, estensione anca, rotazione esterna anca; SLS (stance monopodal)", "DOSAGGIO FASE 2: stretching quotidiano 2-3 x 30 sec; cardio 3-5 volte/sett x 20-35 min; rinforzo quotidiano 2-3 serie x 15-20 rip", "─── FASE 3 — FASE SUBACUTA B ───", "OBIETTIVI: evitare riacutizzazioni; massimizzare il recupero di forza e flessibilità; stabilire forza e stabilità in catena chiusa (CKC)", "ESERCIZI: continuare stretching fasi 1-2; cyclette + progressione alla camminata; progressione OKC con pesi alla caviglia; attrezzatura palestra (leg press, multi-hip, cavo bassa puleggia); rinforzo CKC indolore (step-up anteriori e laterali); progressione SLS; progressione bridging (physioball, foam roll)", "DOSAGGIO FASE 3: stretching quotidiano; cardio 3-5 volte/sett x 20-45 min; rinforzo 3 volte/sett 2-3 serie x 15-20 rip; enfasi sul corretto pattern deambulatorio", "─── FASE 4 — FASE SPORT-SPECIFICA / RITORNO ATTIVITÀ ───", "OBIETTIVI: evitare sovraccarico dell'anca; progressione rinforzo monopodal; raggiungere forza e flessibilità adeguate per il ritorno all'attività", "ESERCIZI: continuare stretching quotidiano; cyclette/camminata/ellittica; inizio progressione corsa per MD/PT; programma OKC e attrezzatura palestra; step-up (laterali, crossover); affondo statico → dinamico; affondo laterale; rinforzo monopodal progressivo (squat monopodal, SL deadlift, SL rotazione esterna)", "DOSAGGIO FASE 4: stretching quotidiano; cardio progressivo per ritorno allo sport; rinforzo 3 volte/sett 2-3 serie x 15-20 rip; ritorno allo sport delineato da MD/PT"]
   }]
 }, {
+  id: 19,
+  category: "Anca",
+  color: "#1B4F8A",
+  icon: "\u{1F9B5}",
+  title: "Lesione da Stiramento degli Ischiocrurali negli Atleti \u2014 CPG 2022",
+  source: "Martin et al. | JOSPT 2022;52(3):CPG1-CPG44 | APTA Orthopedics",
+  pdfUrl: "https://www.jospt.org/doi/10.2519/jospt.2022.0301",
+  tags: ["ischiocrurali", "hamstring", "HSI", "stiramento", "atleti", "ritorno allo sport", "CPG"],
+  summary: "Linea guida CPG dell'APTA Orthopedics sulla lesione da stiramento degli ischiocrurali (Hamstring Strain Injury) nell'atleta. Copre le lesioni sport-correlate da sovraccarico e sovra-stiramento delle strutture miofasciali e muscolotendinee dei tre muscoli ischiocrurali.",
+  sections: [{
+    title: "Ambito e Definizione (dal documento originale)",
+    content: ["\u26A0\uFE0F SCHEDA DA COMPLETARE: di questa linea guida sono al momento riportati solo i dati bibliografici e l'ambito dichiarato dagli autori. Raccomandazioni, test clinici, gradi di evidenza e criteri di ritorno allo sport devono essere inseriti consultando il documento completo tramite il pulsante 'Apri PDF / Fonte originale' qui sopra.", "AMBITO: lesioni sport-correlate da sovraccarico (overloading) e da sovra-stiramento (overstretching) delle strutture miofasciali o muscolotendinee, in qualsiasi combinazione dei tre muscoli ischiocrurali.", "MUSCOLI INTERESSATI: semitendinoso, semimembranoso e bicipite femorale.", "IMPATTO: la lesione degli ischiocrurali pu\u00F2 comportare deficit funzionale rilevante, limitazione dell'attivit\u00E0 e restrizione della partecipazione, incluso il tempo perso dalla competizione sportiva.", "COLLOCAZIONE IN QUESTA APP: inserita nella sezione Anca per continuit\u00E0 clinica \u2014 gli ischiocrurali originano dalla tuberosit\u00E0 ischiatica e le lesioni prossimali rientrano nella valutazione del complesso anca-bacino."]
+  }]
+}, {
   id: 2,
   category: "Ginocchio",
   color: "#0E6B5E",
@@ -306,7 +320,8 @@ const guidelines = [{
   color: "#6B3A2E",
   icon: "💪",
   title: "Tendinopatia Epicondilare Laterale (Tennis Elbow) — Toolkit",
-  source: "BC Physical Therapy Tendinopathy Task Force | Physiopedia LET Toolkit (v2022)",
+  source: "Lucado et al. | JOSPT 2022;52(12):CPG1-CPG111 | APTA Orthopedics | BC Physical Therapy Tendinopathy Task Force \u2014 Physiopedia LET Toolkit",
+  pdfUrl: "https://www.jospt.org/doi/10.2519/jospt.2022.0302",
   tags: ["gomito", "epicondilite", "tennis elbow", "tendinopatia", "LET", "ECRB"],
   summary: "Toolkit evidence-based per la gestione della tendinopatia epicondilare laterale (LET). Include algoritmo clinico, valutazione, outcome measures, esercizio (isometrico/concentrico/eccentrico), terapia manuale, LLLT, ESWT, ortesi e taping.",
   sections: [{
