@@ -1,6 +1,7 @@
 const {
   useState,
-  useMemo
+  useMemo,
+  useEffect
 } = React;
 const guidelines = [{
   id: 1,
@@ -544,6 +545,21 @@ function OrthoGuide() {
   const [cat, setCat] = useState("Tutte");
   const [open, setOpen] = useState({});
   const [saved, setSaved] = useState([]);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sideOpen, setSideOpen] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const apply = m => {
+      setIsMobile(m.matches);
+      setSideOpen(!m.matches);
+    };
+    apply(mq);
+    const onChange = e => apply(e);
+    if (mq.addEventListener) mq.addEventListener("change", onChange);else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);else mq.removeListener(onChange);
+    };
+  }, []);
   const filtered = useMemo(() => guidelines.filter(g => {
     const q = search.toLowerCase();
     const matchQ = !q || g.title.toLowerCase().includes(q) || g.tags.some(t => t.includes(q)) || g.category.toLowerCase().includes(q);
@@ -553,6 +569,7 @@ function OrthoGuide() {
   const pick = g => {
     setSel(g);
     setOpen({});
+    if (isMobile) setSideOpen(false);
   };
   const toggleSec = i => setOpen(o => ({
     ...o,
@@ -579,18 +596,61 @@ function OrthoGuide() {
       overflow: "hidden"
     },
     side: {
-      width: 320,
-      minWidth: 320,
-      display: "flex",
+      width: isMobile ? "100%" : 320,
+      minWidth: isMobile ? "100%" : 320,
+      display: sideOpen ? "flex" : "none",
       flexDirection: "column",
       background: "#fff",
-      borderRight: "1px solid #e2e8f0",
+      borderRight: isMobile ? "none" : "1px solid #e2e8f0",
       overflow: "hidden"
     },
     sideHead: {
-      padding: "16px",
+      padding: "14px 16px",
       borderBottom: "1px solid #e2e8f0",
-      background: "#1e3a5f"
+      background: "#1e3a5f",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10
+    },
+    sideToggle: {
+      flexShrink: 0,
+      border: "1px solid rgba(255,255,255,.3)",
+      background: "rgba(255,255,255,.1)",
+      color: "#fff",
+      borderRadius: 8,
+      width: 34,
+      height: 34,
+      fontSize: 16,
+      lineHeight: 1,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    openBar: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "10px 16px",
+      borderBottom: "1px solid #e2e8f0",
+      background: "#fff",
+      position: "sticky",
+      top: 0,
+      zIndex: 5
+    },
+    openBtn: {
+      border: "1px solid #e2e8f0",
+      background: "#f8fafc",
+      color: "#1e3a5f",
+      borderRadius: 8,
+      padding: "8px 14px",
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: 7
     },
     logo: {
       fontSize: 18,
@@ -604,13 +664,14 @@ function OrthoGuide() {
       marginTop: 2
     },
     searchBox: {
-      margin: "12px 16px 8px",
-      padding: "8px 12px",
+      margin: "12px 0 8px",
+      padding: "10px 12px",
       border: "1px solid #e2e8f0",
       borderRadius: 8,
-      fontSize: 13,
+      fontSize: isMobile ? 16 : 13,
       outline: "none",
-      width: "calc(100% - 56px)"
+      width: "100%",
+      boxSizing: "border-box"
     },
     catBar: {
       display: "flex",
@@ -691,7 +752,7 @@ function OrthoGuide() {
     main: {
       flex: 1,
       overflow: "auto",
-      display: "flex",
+      display: isMobile && sideOpen ? "none" : "flex",
       flexDirection: "column"
     },
     welcome: {
@@ -705,7 +766,7 @@ function OrthoGuide() {
       padding: 40
     },
     detailHead: {
-      padding: "24px 28px 16px",
+      padding: isMobile ? "16px 16px 14px" : "24px 28px 16px",
       borderBottom: "1px solid #e2e8f0"
     },
     metaRow: {
@@ -723,7 +784,7 @@ function OrthoGuide() {
       borderRadius: 6
     },
     detailTitle: {
-      fontSize: 22,
+      fontSize: isMobile ? 19 : 22,
       fontWeight: 700,
       color: "#1e293b",
       fontFamily: "Georgia,serif",
@@ -738,7 +799,7 @@ function OrthoGuide() {
     toolbar: {
       display: "flex",
       gap: 8,
-      padding: "10px 28px",
+      padding: isMobile ? "10px 16px" : "10px 28px",
       borderBottom: "1px solid #f1f5f9",
       background: "#fafafa"
     },
@@ -752,7 +813,7 @@ function OrthoGuide() {
       color: "#475569"
     },
     sections: {
-      padding: "16px 28px",
+      padding: isMobile ? "12px 16px 40px" : "16px 28px",
       display: "flex",
       flexDirection: "column",
       gap: 8
@@ -817,7 +878,7 @@ function OrthoGuide() {
       padding: "6px 12px",
       borderRadius: 8,
       border: "1px solid #fde68a",
-      margin: "0 28px 12px"
+      margin: isMobile ? "0 16px 12px" : "0 28px 12px"
     }
   };
   return React.createElement("div", {
@@ -826,11 +887,16 @@ function OrthoGuide() {
     style: S.side
   }, React.createElement("div", {
     style: S.sideHead
-  }, React.createElement("div", {
+  }, React.createElement("div", null, React.createElement("div", {
     style: S.logo
   }, "🩺 OrthoGuide"), React.createElement("div", {
     style: S.logoSub
-  }, "Linee Guida Ortopediche Evidence-Based")), React.createElement("div", {
+  }, "Linee Guida Ortopediche Evidence-Based")), React.createElement("button", {
+    style: S.sideToggle,
+    onClick: () => setSideOpen(false),
+    title: isMobile ? "Chiudi elenco" : "Nascondi barra laterale",
+    "aria-label": "Nascondi elenco guide"
+  }, isMobile ? "\u2715" : "\u2039")), React.createElement("div", {
     style: {
       padding: "12px 16px 0"
     }
@@ -886,7 +952,24 @@ function OrthoGuide() {
     style: S.tag
   }, t))))))), React.createElement("main", {
     style: S.main
-  }, !sel ? React.createElement("div", {
+  }, !sideOpen && React.createElement("div", {
+    style: S.openBar
+  }, React.createElement("button", {
+    style: S.openBtn,
+    onClick: () => setSideOpen(true)
+  }, React.createElement("span", {
+    style: {
+      fontSize: 15
+    }
+  }, "\u2630"), isMobile ? "Tutte le guide" : "Mostra elenco"), isMobile && sel && React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#94a3b8",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, sel.category)), !sel ? React.createElement("div", {
     style: S.welcome
   }, React.createElement("div", {
     style: {
