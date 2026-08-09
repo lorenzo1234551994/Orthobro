@@ -329,8 +329,8 @@ const guidelines = [{
   }]
 }, {
   id: 7,
-  category: "Rachide Cervicale",
-  color: "#2E6B8A",
+  category: "Rachide",
+  color: "#8B3A3A",
   icon: "🔩",
   title: "Dolore Cervicale — Linee Guida JOSPT 2017",
   source: "Blanpied et al. | JOSPT 2017;47(7):A1-A83 | APTA Orthopaedic Section",
@@ -539,7 +539,6 @@ const COLORS = {
   Ginocchio: "#0E6B5E",
   Spalla: "#5C3A8C",
   Rachide: "#8B3A3A",
-  "Rachide Cervicale": "#2E6B8A",
   Gomito: "#6B3A2E",
   Traumatologia: "#7A6010",
   "Piede e Caviglia": "#1A6B5E"
@@ -662,11 +661,49 @@ function OrthoGuide() {
       width: isMobile ? "100%" : "auto",
       boxShadow: isMobile ? "0 3px 10px rgba(30,58,95,.28)" : "none"
     },
+    logoRow: {
+      display: "flex",
+      alignItems: "center",
+      gap: 9
+    },
+    logoImg: {
+      height: 26,
+      width: "auto",
+      flexShrink: 0
+    },
     logo: {
-      fontSize: 18,
+      fontSize: 19,
       fontWeight: 700,
       color: "#fff",
       fontFamily: "Georgia,serif"
+    },
+    poweredBy: {
+      marginTop: 6,
+      fontSize: 12,
+      color: "#94a3b8",
+      letterSpacing: .3
+    },
+    poweredByStrong: {
+      color: "#64748b",
+      fontWeight: 600
+    },
+    welcomeBtn: {
+      marginTop: 26,
+      border: "none",
+      background: "#1e3a5f",
+      color: "#fff",
+      borderRadius: 12,
+      padding: "16px 26px",
+      fontSize: 17,
+      fontWeight: 700,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      width: "100%",
+      maxWidth: 340,
+      boxShadow: "0 3px 10px rgba(30,58,95,.28)"
     },
     logoSub: {
       fontSize: 11,
@@ -685,15 +722,16 @@ function OrthoGuide() {
     },
     catBar: {
       display: "flex",
-      gap: 4,
-      padding: "0 16px 10px",
+      gap: isMobile ? 7 : 5,
+      padding: isMobile ? "2px 16px 12px" : "0 16px 10px",
       flexWrap: "wrap"
     },
     catBtn: {
-      padding: "3px 10px",
+      padding: isMobile ? "9px 15px" : "6px 13px",
       borderRadius: 20,
       border: "1px solid #e2e8f0",
-      fontSize: 11,
+      fontSize: isMobile ? 14 : 12.5,
+      fontWeight: 600,
       cursor: "pointer",
       background: "#f8fafc",
       color: "#64748b"
@@ -898,8 +936,17 @@ function OrthoGuide() {
   }, React.createElement("div", {
     style: S.sideHead
   }, React.createElement("div", null, React.createElement("div", {
+    style: S.logoRow
+  }, React.createElement("img", {
+    src: "orthobro-mark.png",
+    alt: "",
+    style: S.logoImg,
+    onError: e => {
+      e.target.style.display = "none";
+    }
+  }), React.createElement("span", {
     style: S.logo
-  }, "🩺 OrthoGuide"), React.createElement("div", {
+  }, "OrthoBro")), React.createElement("div", {
     style: S.logoSub
   }, "Linee Guida Ortopediche Evidence-Based")), React.createElement("button", {
     style: S.sideToggle,
@@ -962,7 +1009,7 @@ function OrthoGuide() {
     style: S.tag
   }, t))))))), React.createElement("main", {
     style: S.main
-  }, !sideOpen && React.createElement("div", {
+  }, !sideOpen && (!isMobile || sel) && React.createElement("div", {
     style: S.openBar
   }, React.createElement("button", {
     style: S.openBtn,
@@ -982,18 +1029,19 @@ function OrthoGuide() {
     }
   }, sel.icon, " ", sel.category)), !sel ? React.createElement("div", {
     style: S.welcome
-  }, React.createElement("div", {
+  }, React.createElement("img", {
+    src: "orthobro-logo.png",
+    alt: "Orthobro",
     style: {
-      fontSize: 56
+      width: isMobile ? 230 : 260,
+      maxWidth: "78%",
+      height: "auto",
+      marginBottom: 2
+    },
+    onError: e => {
+      e.target.style.display = "none";
     }
-  }, "🩺"), React.createElement("div", {
-    style: {
-      fontSize: 20,
-      fontWeight: 700,
-      color: "#1e293b",
-      fontFamily: "Georgia,serif"
-    }
-  }, "OrthoGuide"), React.createElement("div", {
+  }), React.createElement("div", {
     style: {
       fontSize: 14,
       textAlign: "center",
@@ -1004,7 +1052,18 @@ function OrthoGuide() {
       fontSize: 12,
       color: "#cbd5e1"
     }
-  }, guidelines.length, " guide disponibili")) : React.createElement(React.Fragment, null, React.createElement("div", {
+  }, guidelines.length, " guide disponibili"), React.createElement("div", {
+    style: S.poweredBy
+  }, "powered by ", React.createElement("span", {
+    style: S.poweredByStrong
+  }, "Powerphysio")), !sideOpen && React.createElement("button", {
+    style: S.welcomeBtn,
+    onClick: () => setSideOpen(true)
+  }, React.createElement("span", {
+    style: {
+      fontSize: 20
+    }
+  }, "\u2630"), "Tutte le guide")) : React.createElement(React.Fragment, null, React.createElement("div", {
     style: S.detailHead
   }, React.createElement("div", {
     style: S.metaRow

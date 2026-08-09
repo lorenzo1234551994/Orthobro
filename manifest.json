@@ -1,18 +1,26 @@
 {
-  "name": "Orthoguide",
-  "short_name": "Orthoguide",
-  "description": "Guida ortopedica basata sull'evidenza, consultabile anche offline.",
+  "name": "OrthoBro — Linee guida ortopediche",
+  "short_name": "OrthoBro",
+  "description": "Linee guida ortopediche e protocolli riabilitativi basati sull'evidenza, consultabili anche offline. Powered by Powerphysio.",
   "lang": "it-IT",
   "dir": "ltr",
   "start_url": "./index.html",
   "scope": "./",
   "id": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
   "orientation": "portrait-primary",
-  "background_color": "#0B3B3C",
-  "theme_color": "#0F766E",
-  "categories": ["medical", "health", "education"],
+  "background_color": "#304860",
+  "theme_color": "#304860",
+  "categories": [
+    "medical",
+    "health",
+    "education"
+  ],
   "icons": [
     {
       "src": "icon-192.png",

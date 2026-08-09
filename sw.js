@@ -1,11 +1,11 @@
 /* Orthoguide — Service Worker
    ------------------------------------------------------------------
    IMPORTANTE: a ogni modifica dei contenuti cambia CACHE_VERSION
-   (orthoguide-v14 -> orthoguide-v2 -> ...). È così che a chi ha già
+   (orthobro-v16 -> orthoguide-v2 -> ...). È così che a chi ha già
    l'app installata compare l'avviso "Aggiorna".
    ------------------------------------------------------------------ */
 
-const CACHE_VERSION = 'orthoguide-v14';
+const CACHE_VERSION = 'orthobro-v16';
 
 const PRECACHE = [
   './',
@@ -20,7 +20,9 @@ const PRECACHE = [
   './icon-maskable-192.png',
   './icon-maskable-512.png',
   './apple-touch-icon.png',
-  './favicon-32.png'
+  './favicon-32.png',
+  './orthobro-logo.png',
+  './orthobro-mark.png'
 ];
 
 self.addEventListener('install', (event) => {
