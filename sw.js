@@ -1,11 +1,9 @@
-/* Orthoguide — Service Worker
-   ------------------------------------------------------------------
+/* OrthoBro — Service Worker
    IMPORTANTE: a ogni modifica dei contenuti cambia CACHE_VERSION
-   (orthobro-v20 -> orthoguide-v2 -> ...). È così che a chi ha già
-   l'app installata compare l'avviso "Aggiorna".
-   ------------------------------------------------------------------ */
+   (orthobro-v26 -> orthobro-v22 -> ...). È così che a chi ha già
+   l'app installata compare l'avviso "Aggiorna". */
 
-const CACHE_VERSION = 'orthobro-v20';
+const CACHE_VERSION = 'orthobro-v26';
 
 const PRECACHE = [
   './',
@@ -15,24 +13,21 @@ const PRECACHE = [
   './app.js',
   './manifest.json',
   './privacy.html',
+  './orthobro-logo.png',
+  './orthobro-mark.png',
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-192.png',
   './icon-maskable-512.png',
   './apple-touch-icon.png',
-  './favicon-32.png',
-  './orthobro-logo.png',
-  './orthobro-mark.png'
+  './favicon-32.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) =>
-      Promise.all(
-        PRECACHE.map((url) =>
-          cache.add(new Request(url, { cache: 'reload' })).catch(() => null)
-        )
-      )
+      Promise.all(PRECACHE.map((url) =>
+        cache.add(new Request(url, { cache: 'reload' })).catch(() => null)))
     )
   );
 });
@@ -44,9 +39,7 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))
-      ))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -58,13 +51,11 @@ self.addEventListener('fetch', (event) => {
 
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((c) => c.put('./index.html', copy));
-          return res;
-        })
-        .catch(() => caches.match('./index.html').then((r) => r || caches.match('./')))
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_VERSION).then((c) => c.put('./index.html', copy));
+        return res;
+      }).catch(() => caches.match('./index.html').then((r) => r || caches.match('./')))
     );
     return;
   }
