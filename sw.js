@@ -1,9 +1,9 @@
 /* OrthoBro — Service Worker
    IMPORTANTE: a ogni modifica dei contenuti cambia CACHE_VERSION
-   (orthobro-v31 -> orthobro-v22 -> ...). È così che a chi ha già
+   (orthobro-v36 -> orthobro-v22 -> ...). È così che a chi ha già
    l'app installata compare l'avviso "Aggiorna". */
 
-const CACHE_VERSION = 'orthobro-v31';
+const CACHE_VERSION = 'orthobro-v36';
 
 const PRECACHE = [
   './',
