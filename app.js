@@ -3,6 +3,53 @@ const {
   useMemo,
   useEffect
 } = React;
+const TEST_VIDEOS = [["scratch collapse", "scratch collapse test"], ["Tinel", "Tinel sign test"], ["Phalen", "Phalen test carpal tunnel"], ["Durkan", "Durkan carpal compression test"], ["Finkelstein", "Finkelstein test"], ["Eichhoff", "Eichhoff test"], ["Watson", "Watson scaphoid shift test"], ["Froment", "Froment sign test"], ["Hawkins-Kennedy", "Hawkins Kennedy test shoulder"], ["Painful Arc", "painful arc test shoulder"], ["Jobe", "Jobe test empty can shoulder"], ["Neer", "Neer impingement test"], ["Yergason", "Yergason test"], ["Hornblower", "Hornblower sign shoulder"], ["Patte", "Patte test shoulder external rotation"], ["lift-off", "Gerber lift off test shoulder"], ["belly press", "belly press test shoulder"], ["drop arm", "drop arm test shoulder"], ["Mills Test", "Mills test tennis elbow"], ["Cozen", "Cozen test tennis elbow"], ["Maudsley", "Maudsley test tennis elbow"], ["Thomsen", "Thomsen test tennis elbow"], ["moving valgus", "moving valgus stress test elbow"], ["Lachman", "Lachman test knee"], ["pivot shift", "pivot shift test knee"], ["McMurray", "McMurray test knee"], ["Thessaly", "Thessaly test knee"], ["Apley", "Apley compression test knee"], ["Clarke", "Clarke sign patellar grind test"], ["Patellar Apprehension", "patellar apprehension test"], ["FABER", "FABER Patrick test hip"], ["FADIR", "FADIR test hip impingement"], ["Trendelenburg", "Trendelenburg test hip"], ["Ober", "Ober test"], ["Gaenslen", "Gaenslen test sacroiliac"], ["thigh thrust", "thigh thrust test sacroiliac"], ["sacral thrust", "sacral thrust test sacroiliac"], ["Spurling", "Spurling test cervical"], ["Lasegue", "Lasegue straight leg raise test"], ["Las\u00E8gue", "Lasegue straight leg raise test"], ["straight leg raise", "straight leg raise test"], ["slump test", "slump test neurodynamic"], ["Thompson", "Thompson test Achilles rupture"], ["Talar Tilt", "talar tilt test ankle"], ["anterior drawer", "anterior drawer test ankle"], ["Star Excursion Balance Test", "star excursion balance test"], ["Silfverskiold", "Silfverskiold test"], ["Silfverski\u00F6ld", "Silfverskiold test"], ["Windlass", "windlass test plantar fasciitis"], ["weight-bearing lunge", "weight bearing lunge test ankle"], ["Beighton", "Beighton score hypermobility"]];
+const TEST_RX = new RegExp("(" + TEST_VIDEOS.map(t => t[0]).sort((a, b) => b.length - a.length).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")", "gi");
+const TEST_MAP = {};
+TEST_VIDEOS.forEach(t => {
+  TEST_MAP[t[0].toLowerCase()] = t[1];
+});
+function withTestVideos(text, color) {
+  if (typeof text !== "string") return text;
+  TEST_RX.lastIndex = 0;
+  if (!TEST_RX.test(text)) return text;
+  TEST_RX.lastIndex = 0;
+  const out = [];
+  let last = 0,
+    m,
+    k = 0;
+  const isLetter = ch => !!ch && /[A-Za-z\u00C0-\u024F]/.test(ch);
+  while ((m = TEST_RX.exec(text)) !== null) {
+    const before = text.charAt(m.index - 1);
+    const after = text.charAt(m.index + m[1].length);
+    if (isLetter(before) || isLetter(after)) continue;
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const q = TEST_MAP[m[1].toLowerCase()];
+    out.push(React.createElement("a", {
+      key: "tv" + k++,
+      href: "https://www.youtube.com/results?search_query=" + encodeURIComponent(q),
+      target: "_blank",
+      rel: "noopener noreferrer",
+      title: "Guarda l'esecuzione del test su YouTube (richiede connessione)",
+      style: {
+        color: color,
+        fontWeight: 700,
+        textDecoration: "underline",
+        textDecorationStyle: "dotted",
+        textUnderlineOffset: 3
+      }
+    }, m[1], React.createElement("span", {
+      style: {
+        fontSize: 11,
+        marginLeft: 3,
+        opacity: .85
+      }
+    }, "▶")));
+    last = m.index + m[1].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
 const guidelines = [{
   id: 0,
   category: "Come Leggere le Guide",
@@ -1798,7 +1845,13 @@ function OrthoGuide() {
     onClick: collapseAll
   }, "▲ Comprimi tutto")), React.createElement("div", {
     style: S.disclaimer
-  }, "⚕️ Uso clinico — Verificare sempre con le fonti originali. Non sostituisce il giudizio clinico."), React.createElement("div", {
+  }, "⚕️ Uso clinico — Verificare sempre con le fonti originali. Non sostituisce il giudizio clinico.", React.createElement("div", {
+    style: {
+      marginTop: 6,
+      fontWeight: 400,
+      opacity: .9
+    }
+  }, "I nomi dei test clinici sottolineati (es. Phalen▶) aprono video dimostrativi su YouTube — serve la connessione.")), React.createElement("div", {
     style: S.sections
   }, sel.sections.map((sec, i) => React.createElement("div", {
     key: i,
@@ -1833,7 +1886,7 @@ function OrthoGuide() {
     }
   }), React.createElement("span", {
     style: S.itemText
-  }, item))))))))));
+  }, withTestVideos(item, c)))))))))));
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(OrthoGuide));

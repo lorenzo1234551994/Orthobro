@@ -1,0 +1,5334 @@
+import { useState, useMemo } from "react";
+
+// ============ VIDEO DEI TEST CLINICI ============
+// Ogni voce: [testo da riconoscere nel contenuto, query di ricerca su YouTube].
+// Si usa la ricerca YouTube e non un ID video fisso: i link non si rompono mai
+// e mostrano sempre i video attualmente disponibili.
+const TEST_VIDEOS = [
+  ["scratch collapse", "scratch collapse test"],
+  ["Tinel", "Tinel sign test"],
+  ["Phalen", "Phalen test carpal tunnel"],
+  ["Durkan", "Durkan carpal compression test"],
+  ["Finkelstein", "Finkelstein test"],
+  ["Eichhoff", "Eichhoff test"],
+  ["Watson", "Watson scaphoid shift test"],
+  ["Froment", "Froment sign test"],
+  ["Hawkins-Kennedy", "Hawkins Kennedy test shoulder"],
+  ["Painful Arc", "painful arc test shoulder"],
+  ["Jobe", "Jobe test empty can shoulder"],
+  ["Neer", "Neer impingement test"],
+  ["Yergason", "Yergason test"],
+  ["Hornblower", "Hornblower sign shoulder"],
+  ["Patte", "Patte test shoulder external rotation"],
+  ["lift-off", "Gerber lift off test shoulder"],
+  ["belly press", "belly press test shoulder"],
+  ["drop arm", "drop arm test shoulder"],
+  ["Mills Test", "Mills test tennis elbow"],
+  ["Cozen", "Cozen test tennis elbow"],
+  ["Maudsley", "Maudsley test tennis elbow"],
+  ["Thomsen", "Thomsen test tennis elbow"],
+  ["moving valgus", "moving valgus stress test elbow"],
+  ["Lachman", "Lachman test knee"],
+  ["pivot shift", "pivot shift test knee"],
+  ["McMurray", "McMurray test knee"],
+  ["Thessaly", "Thessaly test knee"],
+  ["Apley", "Apley compression test knee"],
+  ["Clarke", "Clarke sign patellar grind test"],
+  ["Patellar Apprehension", "patellar apprehension test"],
+  ["FABER", "FABER Patrick test hip"],
+  ["FADIR", "FADIR test hip impingement"],
+  ["Trendelenburg", "Trendelenburg test hip"],
+  ["Ober", "Ober test"],
+  ["Gaenslen", "Gaenslen test sacroiliac"],
+  ["thigh thrust", "thigh thrust test sacroiliac"],
+  ["sacral thrust", "sacral thrust test sacroiliac"],
+  ["Spurling", "Spurling test cervical"],
+  ["Lasegue", "Lasegue straight leg raise test"],
+  ["Las\u00E8gue", "Lasegue straight leg raise test"],
+  ["straight leg raise", "straight leg raise test"],
+  ["slump test", "slump test neurodynamic"],
+  ["Thompson", "Thompson test Achilles rupture"],
+  ["Talar Tilt", "talar tilt test ankle"],
+  ["anterior drawer", "anterior drawer test ankle"],
+  ["Star Excursion Balance Test", "star excursion balance test"],
+  ["Silfverskiold", "Silfverskiold test"],
+  ["Silfverski\u00F6ld", "Silfverskiold test"],
+  ["Windlass", "windlass test plantar fasciitis"],
+  ["weight-bearing lunge", "weight bearing lunge test ankle"],
+  ["Beighton", "Beighton score hypermobility"]
+];
+const TEST_RX = new RegExp(
+  "(" + TEST_VIDEOS
+    .map(t => t[0])
+    .sort((a, b) => b.length - a.length)
+    .map(s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) 
+    .join("|") + ")", "gi"
+);
+const TEST_MAP = {};
+TEST_VIDEOS.forEach(t => { TEST_MAP[t[0].toLowerCase()] = t[1]; });
+
+// Trasforma i nomi dei test presenti nel testo in link a video dimostrativi.
+function withTestVideos(text, color) {
+  if (typeof text !== "string") return text;
+  TEST_RX.lastIndex = 0;
+  if (!TEST_RX.test(text)) return text;
+  TEST_RX.lastIndex = 0;
+  const out = [];
+  let last = 0, m, k = 0;
+  const isLetter = (ch) => !!ch && /[A-Za-z\u00C0-\u024F]/.test(ch);
+  while ((m = TEST_RX.exec(text)) !== null) {
+    const before = text.charAt(m.index - 1);
+    const after = text.charAt(m.index + m[1].length);
+    if (isLetter(before) || isLetter(after)) continue;   // evita falsi positivi
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const q = TEST_MAP[m[1].toLowerCase()];
+    out.push(
+      React.createElement("a", {
+        key: "tv" + (k++),
+        href: "https://www.youtube.com/results?search_query=" + encodeURIComponent(q),
+        target: "_blank",
+        rel: "noopener noreferrer",
+        title: "Guarda l'esecuzione del test su YouTube (richiede connessione)",
+        style: {
+          color: color, fontWeight: 700, textDecoration: "underline",
+          textDecorationStyle: "dotted", textUnderlineOffset: 3
+        }
+      }, m[1], React.createElement("span", { style: { fontSize: 11, marginLeft: 3, opacity: .85 } }, "▶"))
+    );
+    last = m.index + m[1].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+const guidelines = [
+  {
+    id: 0,
+    category: "Come Leggere le Guide",
+    color: "#334155",
+    icon: "\u{1F4D6}",
+    title: "Come Leggere i Gradi di Raccomandazione",
+    source: "APTA Orthopedics / JOSPT \u2014 sistema di grading ufficiale delle Clinical Practice Guidelines",
+    tags: ["gradi", "livelli di evidenza", "raccomandazioni", "metodologia", "come si legge"],
+    summary: "Guida di lettura per interpretare correttamente i gradi che compaiono nelle schede cliniche di questa app. Il sistema principale \u00E8 quello APTA Orthopedics / JOSPT (lettere A-F), ma alcune guide usano sistemi diversi (AAOS, ACR): qui sono messi a confronto. \u26A0\uFE0F Il grado D NON significa 'debole' ma 'evidenza conflittuale': \u00E8 l'errore di lettura pi\u00F9 frequente.",
+    sections: [
+      {
+        title: "I Gradi di Raccomandazione APTA / JOSPT",
+        content: [
+          "\u00C8 il sistema usato dalla maggior parte delle guide di questa app: tutte le CPG pubblicate su JOSPT da APTA Orthopedics e dalle accademie collegate.",
+          "\u2500\u2500\u2500 GRADO A \u2014 EVIDENZA FORTE \u2500\u2500\u2500",
+          "FORZA DELL'EVIDENZA: prevalenza di studi di livello I e/o livello II a supporto della raccomandazione. DEVE includere almeno 1 studio di livello I.",
+          "LIVELLO DI OBBLIGO: 'DEVE' oppure 'DOVREBBE' (must or should)",
+          "\u2192 In pratica: \u00E8 la raccomandazione pi\u00F9 solida. Discostarsene richiede una motivazione clinica documentata.",
+          "\u2500\u2500\u2500 GRADO B \u2014 EVIDENZA MODERATA \u2500\u2500\u2500",
+          "FORZA DELL'EVIDENZA: un singolo trial randomizzato controllato di alta qualit\u00E0, oppure prevalenza di studi di livello II.",
+          "LIVELLO DI OBBLIGO: 'DOVREBBE' (should)",
+          "\u2192 In pratica: indicazione robusta, ma poggia su una base pi\u00F9 stretta del grado A.",
+          "\u2500\u2500\u2500 GRADO C \u2014 EVIDENZA DEBOLE \u2500\u2500\u2500",
+          "FORZA DELL'EVIDENZA: un singolo studio di livello II, oppure prevalenza di studi di livello III e IV, INCLUSE dichiarazioni di consenso di esperti del settore.",
+          "LIVELLO DI OBBLIGO: 'PU\u00D2' (may)",
+          "\u2192 In pratica: opzione legittima da considerare, non un'indicazione. La scelta si giustifica con il ragionamento clinico e le preferenze del paziente.",
+          "\u2500\u2500\u2500 GRADO D \u2014 EVIDENZA CONFLITTUALE \u2500\u2500\u2500",
+          "\u26A0\uFE0F ATTENZIONE: \u00E8 il grado pi\u00F9 frainteso. NON significa 'debole' n\u00E9 'sconsigliato'.",
+          "FORZA DELL'EVIDENZA: studi di qualit\u00E0 superiore condotti su questo argomento sono in DISACCORDO tra loro nelle conclusioni.",
+          "LIVELLO DI OBBLIGO: nessuno indicato \u2014 spesso il gruppo dichiara che non \u00E8 possibile formulare una raccomandazione.",
+          "\u2192 In pratica: la ricerca si contraddice. La decisione torna interamente al clinico e al paziente, e nessuna delle due opzioni pu\u00F2 essere considerata sbagliata sulla base delle prove disponibili.",
+          "\u2500\u2500\u2500 GRADO E \u2014 EVIDENZA TEORICA / FONDAZIONALE \u2500\u2500\u2500",
+          "FORZA DELL'EVIDENZA: prevalenza di prove da studi su animale o cadavere, da modelli e principi concettuali, o dalla ricerca di base e di laboratorio.",
+          "LIVELLO DI OBBLIGO: 'PU\u00D2' (may)",
+          "\u2192 In pratica: il razionale \u00E8 plausibile sul piano biologico o meccanico, ma non \u00E8 stato verificato sui pazienti.",
+          "\u2500\u2500\u2500 GRADO F \u2014 OPINIONE DEGLI ESPERTI \u2500\u2500\u2500",
+          "FORZA DELL'EVIDENZA: best practice basata sull'esperienza clinica del gruppo che ha sviluppato la linea guida.",
+          "LIVELLO DI OBBLIGO: 'PU\u00D2' (may)",
+          "\u2192 In pratica: non c'\u00E8 letteratura, ma il gruppo di esperti ritiene che sia il comportamento corretto. Spesso riguarda aspetti che nessuno studierebbe mai con un RCT (per esempio: fare screening per le red flag)."
+        ]
+      },
+      {
+        title: "I Livelli di Evidenza (Livello I-V)",
+        content: [
+          "I gradi di raccomandazione derivano dai LIVELLI DI EVIDENZA assegnati ai singoli studi. Criteri adattati dal Centre for Evidence-Based Medicine di Oxford.",
+          "\u2500\u2500\u2500 LIVELLO I \u2500\u2500\u2500",
+          "Evidenza ottenuta da studi diagnostici di alta qualit\u00E0, studi prospettici, revisioni sistematiche o trial randomizzati controllati.",
+          "\u2192 Per gli studi di alta qualit\u00E0 si intendono RCT con follow-up superiore all'80%, cecit\u00E0 e procedure di randomizzazione appropriate.",
+          "\u2500\u2500\u2500 LIVELLO II \u2500\u2500\u2500",
+          "Evidenza ottenuta da studi diagnostici, revisioni sistematiche, studi prospettici o trial randomizzati di QUALIT\u00C0 INFERIORE.",
+          "ESEMPI DI CIO' CHE DECLASSA UNO STUDIO: criteri diagnostici e standard di riferimento pi\u00F9 deboli, randomizzazione impropria, assenza di cecit\u00E0, follow-up inferiore all'80%.",
+          "\u2500\u2500\u2500 LIVELLO III \u2500\u2500\u2500",
+          "Studi caso-controllo o studi retrospettivi.",
+          "\u2500\u2500\u2500 LIVELLO IV \u2500\u2500\u2500",
+          "Serie di casi.",
+          "\u2500\u2500\u2500 LIVELLO V \u2500\u2500\u2500",
+          "Opinione degli esperti.",
+          "\u2500\u2500\u2500 NOTA METODOLOGICA \u2500\u2500\u2500",
+          "\u26A0\uFE0F Il livello di evidenza dipende anche dal TIPO DI DOMANDA. Lo stesso disegno di studio riceve livelli diversi a seconda che riguardi: intervento e prevenzione, patoanatomia e fattori di rischio, accuratezza diagnostica, prevalenza della condizione, oppure esami ed esiti.",
+          "ESEMPIO: per una domanda di INTERVENTO, il livello I richiede una revisione sistematica di RCT di alta qualit\u00E0. Per una domanda su FATTORI DI RISCHIO e prognosi, il livello I \u00E8 una revisione sistematica di studi di coorte prospettici \u2014 un RCT non sarebbe n\u00E9 fattibile n\u00E9 etico.",
+          "\u26A0\uFE0F Criteri diagnostici e standard di riferimento pi\u00F9 deboli, randomizzazione impropria, assenza di cecit\u00E0 e follow-up sotto l'80% possono aggiungere bias e minacce alla validit\u00E0."
+        ]
+      },
+      {
+        title: "Gli Altri Sistemi Presenti nell'App",
+        content: [
+          "Non tutte le guide di questa app provengono da APTA/JOSPT. Alcune usano sistemi di grading diversi e NON traducibili uno nell'altro.",
+          "\u2500\u2500\u2500 APTA \u2014 VARIANTE A ROMBI \u2500\u2500\u2500",
+          "Usata da alcune CPG APTA pi\u00F9 recenti (per esempio artrosi gleno-omerale). \u00C8 lo stesso impianto delle lettere ma con simbolo grafico.",
+          "\u2666\u2666\u2666\u2666 FORTE: alto grado di certezza di beneficio da moderato a sostanziale \u2014 obbligo: 'deve' o 'dovrebbe'",
+          "\u2666\u2666\u2666\u25CA MODERATA: alto grado di certezza di beneficio da lieve a moderato \u2014 obbligo: 'dovrebbe'",
+          "\u2666\u2666\u25CA\u25CA DEBOLE: moderato grado di certezza di beneficio lieve \u2014 obbligo: 'pu\u00F2'",
+          "\u2666\u25CA\u25CA\u25CA TEORICA / BEST PRACTICE: evidenza da studi su cadavere o animale, modelli concettuali, opinione esperta pubblicata o norme di pratica corrente",
+          "\u2500\u2500\u2500 AAOS \u2014 American Academy of Orthopaedic Surgeons \u2500\u2500\u2500",
+          "Usata dalle guide su artrosi di ginocchio e patologia meniscale acuta.",
+          "FORTE: evidenza da due o pi\u00F9 studi di qualit\u00E0 alta con risultati coerenti, senza motivi di declassamento \u2014 improbabile che ricerche future la ribaltino",
+          "MODERATA: evidenza da due o pi\u00F9 studi di qualit\u00E0 moderata con risultati coerenti, oppure da un singolo studio di alta qualit\u00E0",
+          "LIMITATA: evidenza da uno o pi\u00F9 studi di bassa qualit\u00E0 con risultati coerenti, o da un singolo studio moderato; oppure evidenza superiore DECLASSATA per criticit\u00E0 nel framework Evidence-to-Decision",
+          "CONSENSO: nessuna evidenza a supporto; raccomandazione basata sull'opinione clinica del gruppo",
+          "\u26A0\uFE0F Nel sistema AAOS una raccomandazione pu\u00F2 essere DECLASSATA anche partendo da buona evidenza, per motivi di fattibilit\u00E0, costo, accettabilit\u00E0 o equit\u00E0. Nelle schede questo \u00E8 sempre indicato: 'LIMITATA, declassata per...'.",
+          "\u2500\u2500\u2500 ACR \u2014 American College of Rheumatology (GRADE) \u2500\u2500\u2500",
+          "Usata dalle guide reumatologiche su spondiloartrite assiale e artrite psoriasica.",
+          "FORTE: i benefici superano chiaramente i rischi; la maggioranza dei pazienti informati sceglierebbe quell'opzione",
+          "CONDIZIONALE: il bilancio tra benefici e rischi \u00E8 pi\u00F9 incerto; scelte diverse sono appropriate per pazienti diversi, e la decisione condivisa \u00E8 essenziale",
+          "\u26A0\uFE0F Nella CPG sull'artrite psoriasica il 94% delle raccomandazioni \u00E8 CONDIZIONALE e basata su evidenza di qualit\u00E0 bassa o molto bassa: un dato da tenere presente leggendola.",
+          "\u2500\u2500\u2500 ALTRI SISTEMI \u2500\u2500\u2500",
+          "Alcune guide riportano formulazioni proprie della fonte originale, per esempio 'evidenza forte / moderata / debole / conflittuale' oppure i Livelli 1-4 della linea guida olandese sulla sindrome da dolore subacromiale. In quei casi la legenda \u00E8 riportata dentro la scheda stessa."
+        ]
+      },
+      {
+        title: "Come Usare i Gradi nella Pratica",
+        content: [
+          "\u2500\u2500\u2500 I TRE VERBI \u2500\u2500\u2500",
+          "DEVE / DOVREBBE (gradi A e B): l'indicazione \u00E8 sostenuta da prove. Non seguirla richiede una ragione clinica specifica, che va documentata.",
+          "PU\u00D2 (gradi C, E, F): l'opzione \u00E8 disponibile e legittima, ma non c'\u00E8 obbligo. Sta al clinico decidere con il paziente.",
+          "NESSUN OBBLIGO (grado D): le prove si contraddicono. La decisione \u00E8 interamente clinica e condivisa.",
+          "\u2500\u2500\u2500 RACCOMANDAZIONI NEGATIVE \u2500\u2500\u2500",
+          "Molte raccomandazioni sono formulate al NEGATIVO: 'i clinici NON DEVONO usare...'. Anche queste hanno un grado, e il grado ne indica la solidit\u00E0.",
+          "ESEMPIO nell'app: 'NON usare ionoforesi o fonoforesi con corticosteroidi nel tunnel carpale' \u00E8 grado A, quindi molto solida. 'NON usare supporti esterni come intervento isolato nell'instabilit\u00E0 cronica di caviglia' \u00E8 grado B.",
+          "\u26A0\uFE0F Una raccomandazione negativa di grado A pesa quanto una positiva di grado A. Non \u00E8 un'assenza di indicazione: \u00E8 un'indicazione a non fare.",
+          "\u2500\u2500\u2500 QUATTRO ERRORI DI LETTURA FREQUENTI \u2500\u2500\u2500",
+          "1. \u26A0\uFE0F LEGGERE D COME 'DEBOLE'. D significa che gli studi buoni sono in disaccordo. \u00C8 diverso da C, che significa che ci sono pochi studi o di qualit\u00E0 bassa.",
+          "2. \u26A0\uFE0F CONFRONTARE GRADI DI SISTEMI DIVERSI. Una raccomandazione 'moderata' AAOS non equivale a un grado B APTA: i criteri di assegnazione sono differenti e l'AAOS pu\u00F2 declassare per ragioni non legate alla qualit\u00E0 dello studio.",
+          "3. \u26A0\uFE0F CONFONDERE ASSENZA DI RACCOMANDAZIONE CON RACCOMANDAZIONE NEGATIVA. Quando una CPG dice 'nessuna raccomandazione formulabile' non sta dicendo di non fare quella cosa: sta dicendo che le prove non permettono di pronunciarsi.",
+          "4. \u26A0\uFE0F ASSUMERE CHE UN GRADO ALTO VALGA PER OGNI PAZIENTE. Le CPG dichiarano esplicitamente di NON costituire uno standard di cura: gli standard si determinano su tutti i dati clinici del singolo individuo. Discostamenti significativi vanno documentati in cartella al momento della decisione.",
+          "\u2500\u2500\u2500 NOTA SULLE DATE \u2500\u2500\u2500",
+          "Ogni scheda riporta l'anno della linea guida nel titolo o nella fonte. Le CPG vengono riviste indicativamente ogni 5 anni, e una revisione pu\u00F2 CAPOVOLGERE raccomandazioni precedenti.",
+          "ESEMPIO nell'app: la revisione 2021 sulla caviglia ha introdotto il reverse anterolateral drawer test perch\u00E9 il cassetto anteriore tradizionale si \u00E8 rivelato poco sensibile; la revisione 2023 sulla prevenzione del LCA ha esteso al calcio maschile una raccomandazione che nel 2018 riguardava soprattutto le donne."
+        ]
+      }
+    ]
+  },
+  {
+    id: 1,
+    category: "Anca",
+    color: "#1B4F8A",
+    icon: "🦴",
+    title: "Artroplastica Totale d'Anca (THA)",
+    source: "AAOS / SIOT 2023",
+    pdfUrl: "https://www.massgeneral.org/assets/mgh/pdf/orthopaedics/sports-medicine/physical-therapy/rehabilitation-protocol-for-total-hip-arthroplasty.pdf",
+    tags: ["protesi", "coxartrosi", "chirurgia"],
+    summary: "Indicazioni, timing chirurgico e gestione perioperatoria per l'artroprotesi totale d'anca.",
+    sections: [
+      {
+        title: "Indicazioni Chirurgiche",
+        content: [
+          "Coxartrosi sintomatica con fallimento del trattamento conservativo (≥3 mesi FANS + FKT)",
+          "Dolore moderato-severo (VAS ≥5) con significativa limitazione funzionale",
+          "Evidenza radiologica: restringimento spazio articolare, osteofiti, sclerosi subcondrale (K-L grade ≥ 3)",
+          "Necrosi avascolare della testa femorale (stadio III-IV Ficat)",
+          "Frattura del collo femorale (Garden III-IV) nell'anziano",
+        ],
+      },
+      {
+        title: "Controindicazioni Assolute",
+        content: [
+          "Infezione attiva locale o sistemica",
+          "Osteomielite pregressa dell'anca",
+          "Deficit neurologico progressivo dell'arto",
+          "Insufficienza muscolare grave (paralisi)",
+        ],
+      },
+      {
+        title: "Profilassi TEV",
+        content: [
+          "EBPM (es. enoxaparina 4000 UI/die) iniziare 12h post-op",
+          "Durata: 28-35 giorni dalla chirurgia",
+          "Alternativa: rivaroxaban 10mg/die o apixaban 2.5mg x2/die",
+          "Calze elastiche compressive per 6 settimane",
+          "Mobilizzazione precoce entro 24h dall'intervento",
+        ],
+      },
+      {
+        title: "Riabilitazione Post-operatoria",
+        content: [
+          "Carico immediato protetto con deambulatore (salvo indicazione chirurgica diversa)",
+          "Esercizi isometrici del quadricipite dal 1° giorno",
+          "Precauzioni anti-lussazione per via posterolaterale (90° flessione, no adduzione/intrarotazione)",
+          "FKT ambulatoriale per 6-8 settimane",
+          "Follow-up: 6 settimane, 3 mesi, 1 anno, poi ogni 2 anni",
+        ],
+      },
+      {
+        title: "Protocollo Riabilitativo Post-THA — 5 Fasi (MGH / ORI Protocol)",
+        content: [
+          "⚠️ NOTA: il protocollo seguente si basa sul Massachusetts General Hospital THA Rehabilitation Protocol (massgeneral.org) — la progressione tra fasi dipende dall'approccio chirurgico (anteriore vs posteriore), dalle precauzioni del chirurgo e dall'evoluzione clinica individuale. Seguire sempre le indicazioni del chirurgo prima di progredire.",
+          "─── FASE 1 — POST-OP IMMEDIATO (Giorni 0-3) ───",
+          "OBIETTIVI: trasferimenti letto/sedia/WC indipendenti; istruzione deambulazione con deambulatore/stampelle; controllo infiammazione e dolore; avvio HEP mobilità e attivazione muscolare",
+          "PRECAUZIONI: via anteriore → nessuna precauzione specifica; via posteriore → evitare flessione eccessiva, no sedie basse (anche al di sotto del livello delle ginocchia)",
+          "ESERCIZI FASE 1: pompe tibiotarsiche, glut set, quad set, heel prop stretch, heel slides, flessione/estensione seduta AAROM, sollevamento tallone/punta; addestramento al passo (bend & kick, heel-to-toe); equilibrio: spostamenti peso, postura ristretta, postura tandem; scale: step-to pattern",
+          "CRITERI PROGRESSIONE: HEP tollerato; trasferimenti sicuri e indipendenti con ausilio minimo; deambulazione con ausilio e gait pattern accettabile",
+          "─── FASE 2 — RIABILITAZIONE PRECOCE (Giorni 3 – 2 Settimane) ───",
+          "OBIETTIVI: protezione articolazione e stabilizzazione protesi; controllo dolore/edema; screen DVT e infezione; migliorare ROM anca; attivazione muscolare; deambulazione indipendente con ausilio minimo; ADL modificate",
+          "ESERCIZI FASE 2: cyclette senza resistenza (ROM); PROM anca (flessione, circonduzioni, abduzione, IR/ER gentle, log rolls); iso abduttori/adduttori; AROM abduzione supina; clamshell supino e laterale; glute bridge; flessione anca in piedi/abduzione/adduzione/estensione; circuiti coni/cerchi/ostacoli; stepping laterale; tandem walk; SLS su superfici piane",
+          "CRITERI PROGRESSIONE: forza anca ≥3/5 (via posteriore); PROM entro 20-30° dall'arto controlaterale; dimissione ausilio, gait pattern buono; dolore da minimo a moderato con attività; SLS ≥10 secondi con dolore minimo",
+          "─── FASE 3 — FASE INTERMEDIA (Settimane 2-6) ───",
+          "OBIETTIVI: normalizzare ROM attivo e passivo; migliorare forza muscolare; normalizzare pattern deambulatorio senza ausili; progressione movimenti funzionali; ADL indipendenti",
+          "ESERCIZI FASE 3: ellittica/UBE/Aerodyne; PROM in range limitati; figure 4 supina/seduta; stretching flessore anca e adduttore in piedi; squat bipodale → wall sit; step-up (anteriore, laterale, curtsy); hip hinge → RDL → stacco da box; band resisted bridge/march/clamshell/side-stepping; SLR (flessione/abduzione/adduzione/estensione); leg press; hamstring curl; plank frontale",
+          "CRITERI PROGRESSIONE: forza anca ≥4-/5; PROM entro 10-20° del lato sano; no deviazioni deambulazione; difficoltà/dolore minimo con ADL e scale; TUG e 30s STS ~80% delle norme per età",
+          "─── FASE 4 — FASE TARDIVA (Settimane 6-12) ───",
+          "OBIETTIVI: ripristino completo ROM; massimizzare performance muscolare e funzionale; ritorno al lavoro se applicabile; ritorno attività ricreative (preparazione attività ad impatto ~12 settimane); ridurre frequenza FKT verso autogestione",
+          "PRECAUZIONI FASE 4: terminare le precauzioni residue; considerare dimissione all'autogestione se progressi e fiducia del paziente adeguati",
+          "ESERCIZI FASE 4: ellittica/tapis roulant/programma acquatico; squat monopodal su box → shrimp squat; ball bridge (bipodale straight-leg, curl, monopodale eccentrico, monopodale completo); stacco da terra → sollevamento e trasporto; plank frontale, laterale, adduttore laterale; sliders in varie direzioni; non-impact plyometrics (shuttle kick-back lento→veloce, med ball slam in squat BL/UL); stabilità dinamica su Bosu (affondi, SL RDL, med ball); dry needling se persistono restrizioni miofasciali",
+          "CRITERI PROGRESSIONE: ROM anca nei limiti normali; forza anca ≥4+/5 (~80% LSI); TUG e 30s STS ~90% norme per età; no difficoltà con ADL/lavoro; dimettere la maggioranza all'autogestione",
+          "─── FASE 5 — RIABILITAZIONE AVANZATA (Settimane 12+) ───",
+          "OBIETTIVI: ritorno agli sport/attività ricreative; potenziamento forza, endurance e propriocezione per ADL, lavoro e sport",
+          "CRITERI PER ATTIVITÀ AD IMPATTO (plyometrics/corsa): ROM completo e funzionale indolore; LSI forza anca ≥90% via dinamometria; 10 pistol squat/shrimp squat/forward heel tap da box 20cm senza pattern compensatorio (~60° flessione ginocchio durante il test)",
+          "PROGRESSIONE IMPATTO: PWB → salti bipodalici assistiti → in piano → AP/ML → scissor hops → SL jumps; FWB → box jump up/down → laterali → step-down → SL box jumps; in place jumps → jog → skipping → broad jump → lateral bound → single leg bound → protocollo ritorno alla corsa",
+          "CRITERI RITORNO ALLO SPORT: LSI forza anca 90-100%; hop test LSI 90-100% arto controlaterale; 200-250 foot contacts senza versamento reattivo prima di iniziare protocollo corsa",
+        ],
+      },
+      {
+        title: "Protocollo Esercizi Post-Operatori \u2014 Progressione Domiciliare",
+        content: [
+          "FONTE: Body Logic Physiotherapy \u2014 Physiotherapy Exercises Following Total Hip Replacement. \u26A0\uFE0F Protocollo di esercizi da consegnare al paziente, non una linea guida con gradi di evidenza.",
+          "\u26A0\uFE0F PRECAUZIONE GENERALE: evitare attivit\u00E0 che portino l'anca al massimo dell'escursione IN QUALSIASI DIREZIONE per i PRIMI 3 MESI, mentre la capsula articolare guarisce.",
+          "\u2500\u2500\u2500 MOVIMENTI DA EVITARE E ALTERNATIVE \u2500\u2500\u2500",
+          "\u26A0\uFE0F NON portare la gamba indietro e ruotata verso l'esterno (posizione tipo swing del golf).",
+          "\u26A0\uFE0F NON ruotare e flettere il ginocchio verso l'alto e attraverso la linea mediana del corpo.",
+          "\u2705 ALTERNATIVA PER VESTIRSI: portare il piede verso l'interno in modo che il ginocchio punti verso l'ESTERNO.",
+          "\u2500\u2500\u2500 ESERCIZI IMMEDIATI \u2014 OGNI ORA \u2500\u2500\u2500",
+          "1. ESERCIZI DI CAVIGLIA: puntare i piedi in alto e in basso con movimento di pompaggio. 10 ripetizioni OGNI ORA, per prevenire la formazione di trombi e drenare il gonfiore dalla gamba.",
+          "2. QUADRICIPITE ISOMETRICO: contrarre i muscoli della faccia anteriore della coscia spingendo la parte posteriore del ginocchio verso il letto. Mantenere 5 SECONDI, 10 ripetizioni OGNI ORA.",
+          "\u2500\u2500\u2500 PROGRESSIONE DEGLI ESERCIZI \u2014 DOSAGGIO GENERALE \u2500\u2500\u2500",
+          "\u2705 Iniziare con 10 RIPETIZIONI di ogni esercizio, 3 VOLTE AL GIORNO, aumentando gradualmente fino a 20-30 ripetizioni senza difficolt\u00E0 significativa.",
+          "\u26A0\uFE0F Esercitarsi SOLO entro i limiti del dolore.",
+          "\u2500\u2500\u2500 ESERCIZI CON SLIDE-BOARD (3 e 4) \u2500\u2500\u2500",
+          "3. FLESSIONE ANCA E GINOCCHIO: far scorrere il tallone avanti e indietro sulla tavoletta flettendo ed estendendo il ginocchio. \u26A0\uFE0F NON flettere l'anca oltre i 70 GRADI.",
+          "4. ABDUZIONE D'ANCA: con ginocchio esteso, far scorrere la gamba lateralmente sulla tavoletta e tornare al centro. \u26A0\uFE0F NON superare la linea mediana.",
+          "\u2500\u2500\u2500 ESERCIZI A LETTO \u2500\u2500\u2500",
+          "5. ESTENSIONE DI GINOCCHIO SU ROTOLO: rotolo di asciugamano sotto il ginocchio, contrarre il quadricipite per estendere il ginocchio e sollevare il tallone dal letto, mantenendo la coscia sul rotolo. Mantenere 5 SECONDI e abbassare lentamente. 10-20 ripetizioni.",
+          "6. SOLLEVAMENTO A GAMBA TESA: contrarre il quadricipite con ginocchio COMPLETAMENTE esteso, poi sollevare la gamba 30 CM dal letto. Mantenere 5 SECONDI.",
+          "7. ESERCIZIO IN ESTENSIONE (ponte): contrarre i glutei, spingere i talloni nel letto, retrarre e avvicinare le scapole, premere le braccia nel letto e sollevare le anche. Mantenere 5 SECONDI.",
+          "\u2500\u2500\u2500 ESERCIZI IN PIEDI \u2500\u2500\u2500",
+          "8. QUARTI DI SQUAT: scendere lentamente flettendo entrambe le ginocchia fino a circa un quarto dello squat completo, poi risalire lentamente. Mantenere la schiena dritta e lasciare lavorare ginocchia e anche.",
+          "9. SOLLEVAMENTI LATERALI: sollevare la gamba operata di lato mantenendo il ginocchio esteso e le dita rivolte in avanti. Mantenere 3 SECONDI e abbassare.",
+          "10. SOLLEVAMENTI IN AVANTI: sollevare la gamba operata in avanti lasciando flettere il ginocchio. Mantenere 3 SECONDI e abbassare.",
+          "11. SOLLEVAMENTI INDIETRO: sollevare la gamba operata all'indietro mantenendo il ginocchio esteso. \u26A0\uFE0F NON inclinarsi in avanti. Mantenere 3 SECONDI e abbassare.",
+          "\u2500\u2500\u2500 CAMMINO E AUSILI \u2500\u2500\u2500",
+          "\u2705 Continuare a usare stampelle o deambulatore per le successive 4-5 SETTIMANE, fino alla rivalutazione del chirurgo o del fisioterapista.",
+          "\u2192 PRINCIPIO: \u00E8 meglio avere un buon schema di cammino con due stampelle che zoppicare rischiando di perdere l'equilibrio.",
+          "\u2705 CRITERIO DI SVEZZAMENTO DALL'AUSILIO: essere in grado di camminare per la lunghezza di un isolato scaricando poca pressione sulle braccia.",
+          "\u2500\u2500\u2500 SCALE \u2014 SEQUENZA \u2500\u2500\u2500",
+          "\u2B06 SALITA: le stampelle restano in basso con la gamba OPERATA. Sale per prima la gamba NON operata. Si scarica il peso sulle braccia attraverso le stampelle. Salgono per ultime la gamba operata e le stampelle.",
+          "\u2B07 DISCESA: le stampelle scendono per prime a terra. Scende poi la gamba OPERATA. Si scarica il peso sulle stampelle. Segue infine la gamba non operata.",
+          "\u2192 REGOLA MNEMONICA: in salita prima la gamba sana, in discesa prima quella operata."
+        ]
+      }
+    ],
+  },
+  {
+    id: 14,
+    category: "Anca",
+    color: "#1B4F8A",
+    icon: "🦴",
+    title: "Dolore e Deficit di Mobilità dell'Anca — Osteoartrite (Hip OA)",
+    source: "Cibulka et al. JOSPT 2017;47(6):A1-A37 | Koc et al. JOSPT 2025;55(11):CPG1-CPG31 | APTA Orthopedics | South Shore Orthopedics Rehab Protocol",
+    pdfUrl: "https://www.orthopt.org/uploads/content_files/files/Hip_pain_and_mobility_deficits_hip_osteoarthritis_2025.pdf",
+    pdfUrl2: "https://www.southshoreorthopedics.com/hip_arthritis/",
+    tags: ["anca", "osteoartrite", "coxartrosi", "esercizio", "terapia manuale", "OA", "CPG"],
+    summary: "Linee guida CPG per la gestione fisioterapica del dolore e dei deficit di mobilità associati all'osteoartrite dell'anca (Hip OA). Include esercizio terapeutico (prima linea), terapia manuale, educazione, controllo del peso e criteri per il rinvio chirurgico.",
+    sections: [
+      {
+        title: "Classificazione e Diagnosi",
+        content: [
+          "DIAGNOSI CLINICA: dolore anteriore all'inguine (possibile irradiazione laterale/posteriore e distalmente al ginocchio), aggravato da attività in carico; riduzione ROM dell'anca (specie rotazione interna e flessione)",
+          "CRITERI DIAGNOSTICI: dolore all'anca + almeno 2 su 3 — ROM rotazione interna <15°, dolore alla rotazione interna, rigidità mattutina <60 min (specificità 86%)",
+          "IMAGING: radiografia standard (AP pelvi + laterale anca) — restringimento spazio articolare, osteofiti, sclerosi subcondrale; classificazione Kellgren-Lawrence (K-L) gradi 0-4",
+          "OUTCOME MEASURES: HOOS (Hip disability and Osteoarthritis Outcome Score); LEFS (Lower Extremity Functional Scale); Harris Hip Score (HHS); NRS per dolore",
+          "DIAGNOSI DIFFERENZIALE: impingement femoro-acetabolare (FAIS), lesione del labbro acetabolare, borsiti, lombalgia con irradiazione, meralgia parestesica, patologia vascolare",
+          "FATTORI PROGNOSTICI NEGATIVI: obesità (BMI >30), dolore grave, bassa autoefficacia, elevata catastrofizzazione, lunga durata dei sintomi",
+        ],
+      },
+      {
+        title: "Esercizio Terapeutico — Prima Linea (Grado A)",
+        content: [
+          "DEVE (Grado A — 2025): prescrivere programma di esercizio individualizzato per migliorare ROM, forza, funzione e dolore — 1-5 sessioni/settimana, 30-120 min, per almeno 8-12 settimane",
+          "ESERCIZI DI RINFORZO: focalizzati su abduttori, estensori e rotatori esterni dell'anca; quadricipite e muscoli del tronco — preferibilmente supervisionati, poi home program",
+          "ESERCIZI AEROBICI: camminata, cyclette, nuoto — migliorano funzione globale e qualità di vita; obiettivo 150 min/settimana di attività moderata",
+          "TERAPIA ACQUATICA: indicata come alternativa quando il carico a terra è limitato da dolore severo o comorbidità",
+          "STRETCHING E FLESSIBILITÀ: esercizi di ROM passivo e attivo-assistito per recuperare rotazione interna e flessione",
+          "EVIDENZA: 14 RCT (n=1242); miglioramenti significativi su dolore e funzione a breve termine; effetti mantenuti a 6-8 mesi nel 50-63% dei pazienti",
+        ],
+      },
+      {
+        title: "Terapia Manuale",
+        content: [
+          "DEVE (Grado A — 2025): terapia manuale con mobilizzazione dei tessuti molli e/o articolare, incluse distrazione longitudinale dell'anca ad alta e bassa forza e mobilizzazione con movimento, per aumentare ROM, ridurre dolore e migliorare funzione in OA lieve-moderata con deficit di mobilità",
+          "TECNICHE: mobilizzazione in distrazione longitudinale (long-axis distraction); mobilizzazione antero-posteriore e postero-anteriore dell'anca; mobilizzazione con movimento (Mulligan); manipolazione dell'anca in casi selezionati",
+          "COMBINAZIONE CON ESERCIZIO: la terapia manuale aggiunta all'esercizio mostra benefici a breve termine su dolore e scala WOMAC globale (evidenza moderata); nessun beneficio aggiuntivo a lungo termine rispetto al solo esercizio (evidenza alta)",
+          "INDICAZIONE PRATICA: usare la terapia manuale nella fase iniziale per ridurre dolore e migliorare compliance all'esercizio, poi mantenere con programma di esercizio autonomo",
+          "TECNICHE SPINALI: mobilizzazione/manipolazione lombo-pelvica indicata in pazienti con concomitante lombalgia o deficit di mobilità lombare",
+        ],
+      },
+      {
+        title: "Educazione, Peso e Gestione a Lungo Termine",
+        content: [
+          "DEVE: educazione del paziente su natura dell'OA (non 'usura' irreversibile), importanza dell'esercizio, autogestione dei sintomi e protezione articolare",
+          "CONTROLLO DEL PESO (Grado A): riduzione ponderale del 5-7.5% in pazienti con BMI >25 kg/m² — riduce carico sull'anca e migliora dolore e funzione",
+          "AUSILI: bastone/deambulatore nella mano controlaterale quando necessario; calzature con suola ammortizzante; ortesi plantari in casi selezionati con deficit biomeccanici associati",
+          "ATTIVITÀ FISICA: incoraggiare il mantenimento dell'attività quotidiana e dello sport a basso impatto; non controindicati nuoto, ciclismo, walking",
+          "BRACING: non indicato come prima linea; considerare solo dopo fallimento di esercizio e terapia manuale per attività specifiche",
+          "FOLLOW-UP: rivalutare a 6-8 settimane; se risposta insufficiente dopo 3 mesi → rivalutazione medica e imaging; se K-L ≥3 con fallimento conservativo → consulto ortopedico per THA",
+        ],
+      },
+      {
+        title: "Criteri per Rinvio Chirurgico",
+        content: [
+          "INDICAZIONE A CONSULTO CHIRURGICO: fallimento del trattamento conservativo supervisionato per ≥3 mesi con dolore persistente e significativa limitazione funzionale",
+          "FATTORI CHE ANTICIPANO IL RINVIO: OA grave (K-L grado 3-4), deformità significative, atleti ad alto livello che vogliono mantenere performance elevata, età <65 anni con OA avanzata",
+          "STANDARD DI RIFERIMENTO: artroprotesi totale d'anca (THA) — indicata per OA sintomatica grave con fallimento conservativo; alta soddisfazione del paziente (>90%) e sopravvivenza dell'impianto >15 anni",
+          "TIMING: non ritardare eccessivamente il consulto chirurgico in pazienti con OA avanzata — il ritardo non migliora gli outcome post-chirurgici",
+          "PREABILITAZIONE: programma di rinforzo e aerobico pre-operatorio migliora il recupero post-THA — indicato anche dopo decisione chirurgica",
+        ],
+      },
+      {
+        title: "Protocollo Riabilitativo Hip OA — 4 Fasi (South Shore Orthopedics)",
+        content: [
+          "FONTE: South Shore Hospital Orthopedic, Spine and Sports Therapy — Hip OA Rehabilitation Protocol (southshoreorthopedics.com). La progressione tra fasi è individuale e basata sulla valutazione clinica del fisioterapista.",
+          "FILOSOFIA: il fisioterapista valuta mobilità, flessibilità e forza per identificare i deficit che aumentano lo stress sull'articolazione dolorosa; include esercizi di rinforzo/stretching anca-ginocchio-core, terapia manuale per migliorare mobilità articolare e ridurre il dolore.",
+          "─── FASE 1 — FASE ACUTA/INFIAMMATORIA ───",
+          "OBIETTIVI: controllo dolore e infiammazione; ripristino ROM articolare indolore; avvio programma flessibilità",
+          "ESERCIZI: heel slides (in arco indolore); rotazione interna/esterna anca supina; bridging gentile; stretching arto inferiore (retto femorale/iliopsoas, IT band/TFL, hamstring, rotatori dell'anca, piriforme, gluteo massimo); cyclette se ROM indolore",
+          "DOSAGGIO FASE 1: ROM quotidianamente — 2-3 serie x 15-20 rip; stretching quotidiano — 2-3 ripetizioni da 30 secondi per ogni posizione; terapia manuale",
+          "─── FASE 2 — FASE SUBACUTA A ───",
+          "OBIETTIVI: protezione articolazione; progressione flessibilità; inizio rinforzo in catena aperta nelle aree di debolezza/instabilità",
+          "ESERCIZI: continuare ROM e flessibilità fase 1; cyclette (progressione lenta della resistenza); rinforzo in catena aperta (OKC): bridging, quadrupedie, SLR (sollevamento gamba tesa), abduzione anca, estensione anca, rotazione esterna anca; SLS (stance monopodal)",
+          "DOSAGGIO FASE 2: stretching quotidiano 2-3 x 30 sec; cardio 3-5 volte/sett x 20-35 min; rinforzo quotidiano 2-3 serie x 15-20 rip",
+          "─── FASE 3 — FASE SUBACUTA B ───",
+          "OBIETTIVI: evitare riacutizzazioni; massimizzare il recupero di forza e flessibilità; stabilire forza e stabilità in catena chiusa (CKC)",
+          "ESERCIZI: continuare stretching fasi 1-2; cyclette + progressione alla camminata; progressione OKC con pesi alla caviglia; attrezzatura palestra (leg press, multi-hip, cavo bassa puleggia); rinforzo CKC indolore (step-up anteriori e laterali); progressione SLS; progressione bridging (physioball, foam roll)",
+          "DOSAGGIO FASE 3: stretching quotidiano; cardio 3-5 volte/sett x 20-45 min; rinforzo 3 volte/sett 2-3 serie x 15-20 rip; enfasi sul corretto pattern deambulatorio",
+          "─── FASE 4 — FASE SPORT-SPECIFICA / RITORNO ATTIVITÀ ───",
+          "OBIETTIVI: evitare sovraccarico dell'anca; progressione rinforzo monopodal; raggiungere forza e flessibilità adeguate per il ritorno all'attività",
+          "ESERCIZI: continuare stretching quotidiano; cyclette/camminata/ellittica; inizio progressione corsa per MD/PT; programma OKC e attrezzatura palestra; step-up (laterali, crossover); affondo statico → dinamico; affondo laterale; rinforzo monopodal progressivo (squat monopodal, SL deadlift, SL rotazione esterna)",
+          "DOSAGGIO FASE 4: stretching quotidiano; cardio progressivo per ritorno allo sport; rinforzo 3 volte/sett 2-3 serie x 15-20 rip; ritorno allo sport delineato da MD/PT",
+        ],
+      },
+    ],
+  },
+  {
+    id: 19,
+    category: "Anca",
+    color: "#1B4F8A",
+    icon: "\u{1F9B5}",
+    title: "Lesione da Stiramento degli Ischiocrurali negli Atleti \u2014 CPG 2022",
+    source: "Martin et al. | JOSPT 2022;52(3):CPG1-CPG44 | APTA Orthopedics + AASPT | Aspetar Hamstring Protocol",
+    pdfUrl: "https://www.orthopt.org/uploads/content_files/files/Hamstring_Strain_Injury_in_Athletes.pdf",
+    pdfUrl2: "https://www.aspetar.com/aspetarfileupload/UploadCenter/636209313253275549_aspetar%20Hamstring%20Protocol.pdf",
+    tags: ["ischiocrurali", "hamstring", "HSI", "stiramento", "atleti", "nordic", "ritorno allo sport", "CPG"],
+    summary: "Linea guida CPG di APTA Orthopedics e American Academy of Sports Physical Therapy sulla lesione da stiramento degli ischiocrurali (Hamstring Strain Injury) nell'atleta. Copre epidemiologia, fattori di rischio, decorso, diagnosi e classificazione in gradi, esame fisico, prevenzione con Nordic hamstring exercise, interventi riabilitativi e criteri di ritorno allo sport. Esclude le lesioni tendinee isolate (intratendinee prossimali o distali).",
+    sections: [
+      {
+        title: "Epidemiologia e Incidenza",
+        content: [
+          "Le HSI sono frequenti negli sport con corsa ad alta velocit\u00E0, salti, calci, movimenti esplosivi degli arti inferiori con rapidi cambi di direzione e sollevamento di carichi da terra.",
+          "Sport a maggiore frequenza: atletica leggera, calcio, football australiano, football americano, rugby.",
+          "Incidenza stimata per 1000 ore di esposizione: 0.87 negli sport senza contatto; 0.92-0.96 negli sport da contatto.",
+          "Calcio professionistico maschile europeo: 3-4.1 lesioni per 1000 ore di gara e 0.4-0.5 per 1000 ore di allenamento.",
+          "Tra il 2001 e il 2014 l'incidenza \u00E8 aumentata del 2.3%/anno in gara (IC 95%: 0.6-4.1) e del 4.0%/anno in allenamento (IC 95%: 1.1-7.0).",
+          "Una squadra di calcio professionistica di 25 giocatori pu\u00F2 attendersi circa 7 HSI a stagione.",
+          "Il 68.2% delle HSI si verifica in allenamento (dati NCAA su football maschile, calcio maschile e femminile).",
+          "Tempo perso dalla competizione: generalmente 3-28 giorni o pi\u00F9, in base alla gravit\u00E0.",
+          "Tasso di recidiva compreso tra 13.9% e 63.3%; chi ha avuto una HSI ha un rischio 3.6 volte maggiore di subirne un'altra.",
+          "L'elevata ricorrenza \u00E8 attribuita a riabilitazione inadeguata o a ritorno allo sport prematuro."
+        ]
+      },
+      {
+        title: "Caratteristiche Patoanatomiche",
+        content: [
+          "Il capo lungo del bicipite femorale \u00E8 il muscolo pi\u00F9 frequentemente coinvolto, sia al primo episodio sia nelle recidive: 79-84% dei casi.",
+          "Il gruppo degli ischiocrurali presenterebbe una percentuale maggiore di fibre di tipo II rispetto agli altri muscoli della coscia, rendendolo pi\u00F9 vulnerabile; la percentuale reale varia con l'et\u00E0 e le caratteristiche individuali.",
+          "Un aumentato tilt pelvico anteriore pone gli ischiocrurali in posizione pi\u00F9 allungata e pu\u00F2 aumentare la probabilit\u00E0 di lesione.",
+          "L'architettura muscolare conta: nel lato infortunato si osservano fascicoli pi\u00F9 corti e angolo di pennazione maggiore rispetto al lato sano, a tutte le intensit\u00E0 di contrazione.",
+          "MECCANISMO DA SOVRACCARICO: avviene in posizione allungata, come nella corsa ad alta velocit\u00E0, quando gli ischiocrurali si contraggono eccentricamente su anca e ginocchio nella fase tardiva di volo e all'appoggio del tallone. Coinvolge tipicamente il bicipite femorale.",
+          "MECCANISMO DA SOVRA-STIRAMENTO: avviene con flessione d'anca ed estensione di ginocchio combinate, come nel calciare o nel raccogliere un oggetto da terra a ginocchio esteso. Coinvolge tipicamente il semimembranoso prossimale."
+        ]
+      },
+      {
+        title: "Fattori di Rischio",
+        content: [
+          "\u2500\u2500\u2500 NON MODIFICABILI \u2500\u2500\u2500",
+          "INFORTUNIO PRECEDENTE: fattore di rischio pi\u00F9 consistente. Tasso di recidiva da 2 a 6 volte superiore; meta-analisi su 71.324 atleti: RR 2.7 (IC 95%: 2.4-3.1).",
+          "RECENZA DELL'INFORTUNIO: una HSI entro le 8 settimane precedenti espone a rischio molto maggiore (OR 13.1; IC 95%: 11.5-14.9) rispetto a una lesione meno recente (OR 3.5; IC 95%: 3.2-3.9).",
+          "STESSA STAGIONE: il rischio di recidiva \u00E8 massimo nella medesima stagione (RR 4.8; IC 95%: 3.5-6.6).",
+          "ET\u00C0: atleti oltre i 23 anni sono a rischio maggiore (RR 1.34; IC 95%: 1.14-1.57); nel football australiano oltre i 25 anni RR 4.43 (IC 95%: 1.57-12.52).",
+          "ALTRI INFORTUNI PREGRESSI: lesione del LCA (RR 1.7), stiramento del polpaccio (RR 1.5), altri infortuni di ginocchio e distorsioni legamentose di caviglia. NON risultano fattori di rischio lo stiramento del quadricipite e la patologia cronica inguinale.",
+          "NON SONO FATTORI DI RISCHIO: altezza e gamba calciante preferita.",
+          "\u2500\u2500\u2500 MODIFICABILI \u2500\u2500\u2500",
+          "PESO E BMI: le revisioni sistematiche non li supportano come fattori di rischio.",
+          "FLESSIBILIT\u00C0: nessuna relazione tra flessibilit\u00E0 degli ischiocrurali e HSI (nessuna associazione con ROM passivo di estensione del ginocchio, AKE, SLR passivo e slump test).",
+          "ARCHITETTURA MUSCOLARE: lunghezza fascicolare del bicipite femorale e stiffness dell'unit\u00E0 muscolo-tendinea sono invece fattori modificabili associati alla lesione.",
+          "FORZA: evidenza limitata per la debolezza degli ischiocrurali come fattore di rischio; nessuna associazione con la forza dei flessori misurata durante Nordic o test isocinetico. Un maggiore picco di coppia concentrica del quadricipite a 300\u00B0/s risulta invece fattore di rischio (HR 2.06; IC 95%: 1.21-3.51).",
+          "CARICO DI CORSA AD ALTA VELOCIT\u00C0: maggiori richieste posizionali di high-speed running sono fattore di rischio, con evidenza da moderata a forte in calcio, football americano e rugby. Particolarmente a rischio gli atleti con incrementi rapidi dell'esposizione.",
+          "CONTROLLO MOTORIO: attivit\u00E0 alterata di tronco e glutei e controllo motorio anomalo sono potenziali fattori di rischio; aumentato tilt pelvico anteriore e inclinazione laterale del rachide toracico durante lo sprint risultano associati alla lesione."
+        ]
+      },
+      {
+        title: "Decorso Clinico e Guarigione",
+        content: [
+          "La lesione pu\u00F2 verificarsi lungo tutta la lunghezza del muscolo, ma pi\u00F9 frequentemente alla giunzione miotendinea del bicipite femorale prossimale.",
+          "Al momento del trauma: dolore improvviso e acuto alla faccia posteriore della coscia, spesso con sensazione udibile o palpabile di schiocco; l'atleta interrompe abitualmente l'attivit\u00E0.",
+          "Le lesioni con danno miofasciale pi\u00F9 esteso che si prolunga nel tendine sono pi\u00F9 soggette a recidiva e a ritorno allo sport ritardato.",
+          "FASE INFIAMMATORIA: immediata, dura circa 3-5 giorni. Vasodilatazione e aumentata permeabilit\u00E0 capillare causano stasi di fluidi e ambiente ischemico locale, con ulteriore danno muscolare ed edema. Clinicamente: dolore, gonfiore, sanguinamento e perdita di ROM.",
+          "FASE PROLIFERATIVA: si sovrappone parzialmente alla precedente e pu\u00F2 durare diverse settimane. Le cellule satelliti riparano le miofibre danneggiate mentre collagene e infrastruttura vascolare vengono ricostruiti. Clinicamente: debolezza, rigidit\u00E0, gonfiore e limitazione funzionale.",
+          "FASE DI RIMODELLAMENTO: pu\u00F2 proseguire fino a 2 anni. Formazione finale del collagene; una matrice extracellulare correttamente allineata \u00E8 necessaria per mantenere l'orientamento ottimale delle miofibrille.",
+          "IMPLICAZIONE PRATICA: ROM precoce di anca e ginocchio e mobilizzazione dei tessuti molli favoriscono una cicatrice pi\u00F9 organizzata, con minori aderenze ai tessuti circostanti e minore tasso di recidiva."
+        ]
+      },
+      {
+        title: "Diagnosi e Classificazione in Gradi",
+        content: [
+          "RACCOMANDAZIONE (Grado B): porre diagnosi di HSI in presenza di esordio improvviso di dolore posteriore alla coscia durante l'attivit\u00E0, dolore riprodotto dallo stiramento e/o dall'attivazione degli ischiocrurali, dolorabilit\u00E0 muscolare alla palpazione e perdita di funzione.",
+          "Il reperto pi\u00F9 utile risulta il riferito esordio improvviso di dolore (presente nel 91% dei casi).",
+          "\u2500\u2500\u2500 GRADO I \u2014 STIRAMENTO LIEVE (Grado F) \u2500\u2500\u2500",
+          "Microlacerazione di poche fibre muscolari; dolore locale di dimensioni ridotte; tensione ed eventuali crampi posteriori; lieve dolore allo stiramento e/o all'attivazione; rigidit\u00E0 che pu\u00F2 ridursi durante l'attivit\u00E0 e ricomparire dopo; minima perdita di forza; deficit <15\u00B0 al test AKE. Durata media riabilitazione: 25.9 giorni.",
+          "\u2500\u2500\u2500 GRADO II \u2014 STIRAMENTO MODERATO (Grado F) \u2500\u2500\u2500",
+          "Lacerazione moderata delle fibre con muscolo ancora integro; dolore locale su area pi\u00F9 estesa; dolore maggiore allo stiramento e/o all'attivazione; rigidit\u00E0, debolezza, possibile emorragia ed ecchimosi; capacit\u00E0 di cammino limitata soprattutto nelle prime 24-48 ore; deficit 16\u00B0-25\u00B0 al test AKE. Durata media riabilitazione: 30.7 giorni.",
+          "\u2500\u2500\u2500 GRADO III \u2014 STIRAMENTO GRAVE (Grado F) \u2500\u2500\u2500",
+          "Lacerazione completa del muscolo; gonfiore e sanguinamento diffusi; possibile massa palpabile di tessuto muscolare in sede di rottura; estrema difficolt\u00E0 o incapacit\u00E0 di camminare; deficit 26\u00B0-35\u00B0 al test AKE. Durata media riabilitazione: 75.0 giorni.",
+          "\u26A0\uFE0F Nei modelli ad accesso diretto, i sospetti di lesione di grado III vanno inviati al medico (Grado F).",
+          "NOTA: i criteri di grading sono di uso comune ma necessitano ancora di studi su affidabilit\u00E0 e validit\u00E0, e non considerano la sede esatta della lesione."
+        ]
+      },
+      {
+        title: "Diagnosi Differenziale e Imaging",
+        content: [
+          "DIAGNOSI DIFFERENZIALE per sintomi posteriori di coscia: radicolopatia lombare, disfunzione sacroiliaca, deep gluteal syndrome con intrappolamento nervoso, sindrome del tunnel ischiatico, stiramento degli adduttori, contusione, sindrome compartimentale, trombosi.",
+          "Quando l'area di massima dolorabilit\u00E0 \u00E8 all'origine o all'inserzione del gruppo, va considerata la patologia tendinea nella diagnosi differenziale.",
+          "Se il meccanismo \u00E8 un trauma diretto alla faccia posteriore della coscia, considerare una diagnosi differente, ad esempio una contusione.",
+          "Un esordio insidioso con sintomi posteriori vaghi deve far sospettare un dolore riferito dal rachide lombare.",
+          "IMAGING: in genere non necessaria nelle lesioni di grado I e II diagnosticate clinicamente, che possono peraltro non essere identificabili in RM.",
+          "RM raccomandata nel sospetto di lesione di grado III.",
+          "L'aggiunta della RM all'esame clinico spiega solo un ulteriore 2.8% della varianza nella previsione del tempo di ritorno allo sport: non migliora sostanzialmente la prognosi rispetto alla sola valutazione clinica.",
+          "RM o ecografia possono essere utili nelle presentazioni atipiche o quando il trattamento conservativo non d\u00E0 risultati soddisfacenti; radiografia in genere non necessaria, salvo sintomi prossimali per escludere fratture da avulsione."
+        ]
+      },
+      {
+        title: "Esame Fisico \u2014 Misure di Impairment",
+        content: [
+          "RACCOMANDAZIONE (Grado A): quantificare la forza dei flessori del ginocchio con dinamometro portatile (HHD) o isocinetico.",
+          "RACCOMANDAZIONE (Grado A): valutare la lunghezza degli ischiocrurali misurando il deficit di estensione del ginocchio con anca flessa a 90\u00B0, usando un inclinometro.",
+          "RACCOMANDAZIONE (Grado C): la lunghezza dell'area di dolorabilit\u00E0 e la sua prossimit\u00E0 alla tuberosit\u00E0 ischiatica possono aiutare a prevedere i tempi di ritorno allo sport.",
+          "RACCOMANDAZIONE (Grado F): valutare postura e controllo di tronco e bacino durante i movimenti funzionali.",
+          "FORZA ISOMETRICA CON HHD \u2014 posizioni di test: inner range (prono, ginocchio a 90\u00B0, make force); midrange (prono, ginocchio esteso, arto sollevato, break force dopo 3 secondi); outer range (supino, anca e ginocchio a 90\u00B0, break force); 15\u00B0 di flessione (prono, make force). Affidabilit\u00E0 intrarater ICC 0.87-0.90.",
+          "TEST NORDIC ECCENTRICO: posizione in ginocchio con caviglie bloccate, discesa lenta del tronco mantenendo rachide e anche neutri; ICC 0.87-0.92, MDC95 55.6 N.",
+          "SINGLE-LEG BRIDGE TEST: tallone su rialzo di 60 cm, ginocchio a 20\u00B0, ripetizioni fino a esaurimento; punteggi inferiori risultano associati a successiva HSI.",
+          "TEST AKE (anca/ginocchio 90\u00B0/90\u00B0): estensione massima del ginocchio con misurazione del deficit; affidabilit\u00E0 con ROM attivo ICC 0.89 (SEM 5.3\u00B0). Nei casi confermati ecograficamente il deficit medio rispetto al lato sano \u00E8 di 12.8\u00B0 \u00B1 6.8\u00B0.",
+          "SLR e ASKLING H-TEST: l'H-test prevede tre SLR eseguiti il pi\u00F9 rapidamente e in alto possibile senza timore di recidiva, registrando il valore maggiore (ICC 0.96); utile nella decisione di ritorno allo sport.",
+          "MAPPATURA DELLA DOLORABILIT\u00C0: in prono a ginocchio esteso, si individua il punto di massima dolorabilit\u00E0 misurandone la distanza dalla tuberosit\u00E0 ischiatica, poi si delimitano lunghezza e larghezza dell'area. Percentuale di lunghezza della dolorabilit\u00E0 ed et\u00E0 sono i migliori predittori dei giorni al ritorno allo sport (R\u00B2 = 0.73). Un dolore pi\u00F9 prossimale comporta tempi pi\u00F9 lunghi.",
+          "SQUILIBRIO ECCENTRICO: un'asimmetria di forza eccentrica dei flessori tra gli arti superiore al 15-20% aumenta il rischio di HSI rispettivamente di 2.4 e 3.4 volte."
+        ]
+      },
+      {
+        title: "Attivit\u00E0, Partecipazione e Outcome Measures",
+        content: [
+          "RACCOMANDAZIONE (Grado B): includere misure oggettive della capacit\u00E0 di camminare, correre e sprintare per documentare i cambiamenti di attivit\u00E0 e partecipazione nel corso del trattamento.",
+          "PROGRESSIONE FUNZIONALE DI RIFERIMENTO: cammino indolore \u2192 corsa lenta indolore \u2192 corsa al 70% della velocit\u00E0 massima percepita \u2192 cambi di direzione indolori \u2192 corsa al 100%.",
+          "RACCOMANDAZIONE (Grado B): usare la FASH (Functional Assessment Scale for Acute Hamstring Injuries) prima e dopo gli interventi nei soggetti con HSI acuta.",
+          "FASH: questionario a 10 item, affidabilit\u00E0 test-retest eccellente (ICC 0.9), consistenza interna elevata (alfa di Cronbach 0.98), validit\u00E0 di facciata, di contenuto e di costrutto stabilite.",
+          "HaOS (Hamstring Outcome Score): 5 domini \u2014 indolenzimento, sintomi, dolore, attivit\u00E0 sportive e qualit\u00E0 di vita. Punteggio \u226580% indica basso rischio di HSI, sotto l'80% rischio elevato. Usato principalmente in fase pre-partecipazione per identificare atleti suscettibili.",
+          "TEST DI SPRINT RIPETUTI: affidabilit\u00E0 eccellente (ICC 0.978); atleti con precedente HSI mostrano un decremento di velocit\u00E0 significativo nelle ripetizioni."
+        ]
+      },
+      {
+        title: "Prevenzione dell'Infortunio",
+        content: [
+          "RACCOMANDAZIONE (Grado A): includere il Nordic hamstring exercise (NHE) in un programma di prevenzione, insieme ad altre componenti di riscaldamento, stretching, training di stabilit\u00E0, rinforzo e movimenti funzionali (sport-specifici, agilit\u00E0 e corsa ad alta velocit\u00E0).",
+          "EFFICACIA: il NHE riduce l'incidenza di HSI del 51% (RR 0.49; IC 95%: 0.32-0.74) su 15 studi e 8459 atleti.",
+          "L'efficacia dipende dall'aderenza al programma: la compliance \u00E8 determinante.",
+          "CALCIO FEMMINILE: le strategie basate sull'esercizio riducono l'incidenza del 40-60%, in linea con quanto osservato negli uomini (incidence rate ratio 0.40; IC 95%: 0.17-0.95).",
+          "RCT su 259 calciatori maschi di scuola superiore: tempo perso per infortunio nettamente inferiore nel gruppo NHE rispetto al controllo.",
+          "PROGRAMMI STRUTTURATI: FIFA 11+, HarmoKnee e New Warm-up Program includono il NHE insieme alle altre componenti citate.",
+          "DOSAGGIO: le raccomandazioni variano, da 2 serie di 3 ripetizioni una volta a settimana fino a 3 serie da 10 due volte a settimana, con progressione graduale fino a 4 sessioni settimanali. Gli esercizi si eseguono generalmente dopo l'allenamento e nei giorni che precedono un giorno di riposo, per consentire un recupero adeguato.",
+          "STRETCHING: evidenza inconcludente a supporto del solo stretching degli ischiocrurali in prevenzione.",
+          "ESERCIZI ECCENTRICI DIVERSI DAL NHE: evidenza debole; il NHE resta l'esercizio meglio supportato."
+        ]
+      },
+      {
+        title: "Interventi dopo l'Infortunio",
+        content: [
+          "RACCOMANDAZIONE (Grado B): usare il training eccentrico secondo la tolleranza del paziente, aggiunto a stretching, rinforzo, stabilizzazione e programmi di corsa progressiva, per migliorare i tempi di ritorno allo sport.",
+          "RACCOMANDAZIONE (Grado B): usare agilit\u00E0 progressiva e stabilizzazione del tronco, aggiunte a un programma impairment-based con stretching, rinforzo ed esercizi funzionali, per ridurre il tasso di recidiva.",
+          "RACCOMANDAZIONE (Grado F): la mobilizzazione neurale pu\u00F2 essere usata per ridurre le aderenze ai tessuti circostanti, insieme a terapie fisiche per controllare dolore e gonfiore nelle fasi precoci della guarigione.",
+          "DOSAGGIO DELL'ESERCIZIO: iniziare il rinforzo, eccentrico compreso, precocemente e guidati dalla tolleranza al dolore. Gli studi efficaci prevedono 6-12 ripetizioni in base all'intensit\u00E0, con carico e ROM aumentati secondo tolleranza, 2-3 volte a settimana.",
+          "CORSA: programma con fasi di accelerazione e decelerazione, incremento progressivo di velocit\u00E0 e distanza lungo tutto il percorso riabilitativo, secondo tolleranza.",
+          "SOGLIA DEL DOLORE: un RCT di alta qualit\u00E0 non ha trovato differenze tra riabilitazione condotta entro limiti di assenza di dolore (mediana 15 giorni al ritorno) e riabilitazione condotta fino alla soglia del dolore (17 giorni), con 2 recidive per gruppo.",
+          "AGILIT\u00C0 E STABILIZZAZIONE vs STRETCHING E RINFORZO ISOLATI: rischio di recidiva nettamente inferiore con agilit\u00E0 e stabilizzazione (7.7% contro 70%).",
+          "PROGRAMMA INDIVIDUALIZZATO vs SOLO NHE: un programma impairment-based individualizzato riduce il rischio di recidiva rispetto al solo NHE standard (RR 6; IC 90%: 1-35), senza differenze nei tempi di ritorno.",
+          "STRETCHING ISOLATO: evidenza insufficiente a supportarlo come trattamento unico nella gestione della HSI.",
+          "MOBILIZZAZIONE PRECOCE: una serie di casi su 48 lesioni in atleti universitari riporta ritorno allo sport in media a 11.9 giorni (range 5-23) con mobilizzazione precoce, stretching progressivo ed esercizi funzionali sport-correlati.",
+          "\u26A0\uFE0F CAUTELA SUL CARICO: progredire esercizio e corsa oltre la tolleranza individuale pu\u00F2 riacutizzare i sintomi. Riconoscere la fase di guarigione in corso (infiammatoria, proliferativa, di rimodellamento) e usare un metodo sistematico per iniziare, monitorare e progredire il carico sul tessuto."
+        ]
+      },
+      {
+        title: "Ritorno allo Sport e Rischio di Recidiva",
+        content: [
+          "RACCOMANDAZIONE (Grado B): considerare la storia di HSI nella progressione verso il ritorno allo sport, poich\u00E9 una lesione precedente \u00E8 fattore di rischio per la recidiva.",
+          "RACCOMANDAZIONE (Grado B): usare cautela nelle decisioni di ritorno allo sport per chi non ha completato un programma di esercizio funzionale impairment-based adeguatamente progredito e comprensivo di training eccentrico.",
+          "RACCOMANDAZIONE (Grado B): stimare i tempi di ritorno usando forza degli ischiocrurali, livello di dolore al momento dell'infortunio, numero di giorni dall'infortunio al cammino indolore e area di dolorabilit\u00E0 misurata alla valutazione iniziale.",
+          "VALUTAZIONE A 7 GIORNI: la combinazione di variabili cliniche e demografiche raccolte alla valutazione iniziale spiega il 50% della varianza (\u00B119 giorni) nella previsione del ritorno; le stesse variabili raccolte 7 giorni dopo spiegano il 97% della varianza (\u00B15 giorni).",
+          "VARIABILI PI\u00D9 PREDITTIVE, in ordine: variazione di forza nella prima settimana al test midrange; picco di coppia isocinetica in flessione del ginocchio dell'arto sano al giorno 1; livello di dolore al momento dell'infortunio; giorni al cammino indolore; praticare calcio; forza inner-range al giorno 1; presenza o assenza di dolore al single-leg bridge al giorno 7; ritardo nell'inizio della fisioterapia; percentuale di forza outer-range rispetto all'arto sano.",
+          "BATTERIA DI TEST RACCOMANDATA: combinazione di valutazione clinica (test muscolare manuale, ROM, palpazione), test di performance (sprint, agilit\u00E0, salti monopodalici, gesti sport-specifici) e dinamometria isocinetica.",
+          "ESITI DELLE DIVERSE STRATEGIE: con clinica e test di performance, ritorno medio 23-45 giorni e recidive 9.1-63.3%; aggiungendo la dinamometria isocinetica, ritorno 12-25 giorni e recidive 6.25-13.9%; con l'Askling H-test nei criteri decisionali, ritorno 36 e 63 giorni con recidive 1.3% e 3.6%.",
+          "DIFFERENZE DI GENERE: nessuna differenza nei tempi di ritorno tra uomini e donne, ma tasso di recidiva superiore nei calciatori maschi (22%) rispetto alle calciatrici (12%).",
+          "PRINCIPIO GUIDA: consentire il ritorno prima che l'atleta sia pronto aumenta il rischio di recidiva. Una progressione funzionale basata su criteri oggettivi permette un rientro efficace e tempestivo minimizzando quel rischio."
+        ]
+      },
+      {
+        title: "Protocollo Riabilitativo Aspetar \u2014 6 Stadi Criteria-Based",
+        content: [
+          "FONTE: Aspetar Orthopaedic and Sports Medicine Hospital, Doha \u2014 Aspetar Hamstring Protocol (link 'Protocollo Riabilitativo' qui sopra). \u26A0\uFE0F Le tabelle complete di esercizi, serie e ripetizioni si trovano nel documento originale: qui \u00E8 riportata la struttura del protocollo e i criteri di progressione.",
+          "PRINCIPIO CARDINE: la progressione allo stadio successivo richiede che criteri fisici prestabiliti siano dimostrati con test specifici. Non si progredisce per tempo trascorso, ma per criteri raggiunti.",
+          "MISURAZIONI GIORNALIERE: dolore soggettivo, dolore alla palpazione, ROM/flessibilit\u00E0 e forza. Questi dati permettono di adattare il protocollo giorno per giorno e di leggere la risposta al trattamento del giorno precedente.",
+          "NESSUNA PROVOCAZIONE DEL DOLORE \u00E8 ammessa durante l'esecuzione degli esercizi.",
+          "STRUTTURA: 6 stadi complessivi \u2014 3 stadi 'fisioterapici' e 3 stadi sport-specifici. Nonostante gli esercizi suggeriti per ciascuno stadio, il ragionamento clinico resta continuamente necessario per adattare ogni singola seduta.",
+          "SUPERVISIONE: nel protocollo validato, riabilitazione supervisionata da fisioterapisti esperti 3-5 giorni a settimana, avviata il prima possibile dopo l'infortunio.",
+          "\u2500\u2500\u2500 STADIO 1 \u2014 GUARIGIONE E CARICO PRECOCE OTTIMALE \u2500\u2500\u2500",
+          "OBIETTIVI: promuovere la guarigione e il carico precoce ottimale del tessuto lesionato; proteggere lo sviluppo del tessuto cicatriziale; minimizzare atrofia muscolare e dolore.",
+          "CARICO ISOMETRICO PRECOCE: isometrie a leva corta come punto di partenza, dove non ci si attende produzione di forza elevata e il dolore pu\u00F2 addirittura impedire la contrazione. Principio operativo: carichi piccoli, molto frequenti.",
+          "Le lesioni con coinvolgimento tendineo o pi\u00F9 prossimali rispondono bene alle isometrie precoci, che permettono di caricare in modo pi\u00F9 selettivo le zone interessate dell'unit\u00E0 muscolo-tendinea.",
+          "\u2500\u2500\u2500 STADI 2-3 \u2014 RECUPERO COMPLETO DELLA FUNZIONE MUSCOLARE \u2500\u2500\u2500",
+          "OBIETTIVI: recuperare il pieno controllo volontario del muscolo lesionato; recuperare forza indolore dai range interni fino alle lunghezze maggiori; sviluppare adeguato controllo di tronco e bacino con velocit\u00E0 e carico crescenti sugli ischiocrurali; raggiungere corsa indolore fino alla velocit\u00E0 massima, con cambi di direzione e sotto affaticamento.",
+          "CRITERIO DECISIONALE SULLE ISOMETRIE: se la forza aumenta e il dolore diminuisce, si progredisce o si aumenta l'intensit\u00E0. Se compare dolore con calo di forza, in quella seduta non si progredisce.",
+          "RIFERIMENTO DI FORZA: la forza dell'arto lesionato viene espressa come percentuale dell'arto sano, usato come stima della forza attesa a fine riabilitazione.",
+          "In fase intermedia si abbandona di norma il test isometrico in inner range, poich\u00E9 il dolore si \u00E8 risolto e la forza \u00E8 tornata a livelli comparabili al lato sano; resta invece utile nelle lesioni con coinvolgimento tendineo.",
+          "PROGRESSIONE PONTE: dal bridge bipodalico al single-leg bridge test.",
+          "CARICO ADEGUATO: una volta raggiunta un'intensit\u00E0 sufficiente, \u00E8 atteso un lieve calo di forza o di ROM se si testa entro un ciclo di 24-36 ore. \u00C8 la normale risposta al carico di allenamento e indica che il dosaggio \u00E8 adeguato.",
+          "PREPARAZIONE ALL'ECCENTRICO: l'esercizio isometrico bilaterale in ginocchio aiuta l'atleta a superare il timore di caricare il muscolo lesionato e prepara il passaggio agli esercizi eccentrici.",
+          "\u2500\u2500\u2500 STADI 4-6 \u2014 REINTEGRO SPORT-SPECIFICO COMPLETO \u2500\u2500\u2500",
+          "OBIETTIVI: rimanere asintomatici durante tutte le attivit\u00E0; completare tre sedute sport-specifiche progressive a pieno impegno senza dolore n\u00E9 durante n\u00E9 dopo la seduta.",
+          "TEST DI FINE PERCORSO: si prosegue con i test isometrici in mid e outer range. Gli hold isometrici possono rivelare un problema di endurance o di affaticamento muscolare, visibile nell'impulso della curva di forza.",
+          "ATTENZIONE METODOLOGICA: possono emergere discrepanze tra dinamometro portatile monopodalico, dinamometro a telaio fisso bilaterale e dinamometro a punto fisso \u2014 un atleta pu\u00F2 mostrare differenze significative nel test unilaterale e nessuna in quello bilaterale.",
+          "\u2500\u2500\u2500 PROGRESSIONE DELLA CORSA \u2500\u2500\u2500",
+          "ESERCIZI PREPARATORI: triple extension walk, high knee, 'A' drill, high knee con kicks (indicativamente 100 m per giro, 2 giri).",
+          "WALK-JOG: iniziare a correre al 10-25% della velocit\u00E0 massima autovalutata dal paziente, con progressione a step del 10% fino a un massimo del 70%.",
+          "JOG-RUN E MODIFIED T-DRILLS: iniziare al 70% autovalutato, progredire del 10% finch\u00E9 possibile; raggiunto il 90%, procedere per incrementi del 5%.",
+          "\u2500\u2500\u2500 VARIANTE ASPETAR+ \u2500\u2500\u2500",
+          "Il protocollo ASPETAR+ ha struttura identica ma aggiunge esercizi di allungamento (lengthening) avviati precocemente nella fase riabilitativa, con l'obiettivo di caricare l'unit\u00E0 muscolo-tendinea a lunghezze maggiori verso il fine range."
+        ]
+      },
+      {
+        title: "Albero Decisionale \u2014 Sintesi Operativa",
+        content: [
+          "\u2500\u2500\u2500 SCREENING E CLASSIFICAZIONE \u2500\u2500\u2500",
+          "Esordio improvviso di dolore posteriore alla coscia (B); dolore riprodotto da stiramento e attivazione (B); dolorabilit\u00E0 alla palpazione (B); perdita di funzione (B); precedente HSI (B); grading I-II-III con test AKE (F); invio al medico per sospetto grado III (F).",
+          "\u2500\u2500\u2500 MISURE PER DOCUMENTARE I PROGRESSI \u2500\u2500\u2500",
+          "Forza dei flessori con HHD o dinamometro isocinetico (A); lunghezza degli ischiocrurali con inclinometro e deficit di estensione ad anca flessa a 90\u00B0 (A); lunghezza dell'area di dolorabilit\u00E0 e posizione rispetto alla tuberosit\u00E0 ischiatica; postura e controllo di tronco e bacino nei movimenti funzionali (F); misure oggettive di cammino, corsa e sprint (B); FASH (B).",
+          "\u2500\u2500\u2500 MISURE PER STIMARE I TEMPI DI RITORNO \u2500\u2500\u2500",
+          "Forza dei flessori con HHD o isocinetico (B); livello di dolore al momento dell'infortunio (B); giorni al cammino indolore (B); area di dolorabilit\u00E0 alla valutazione iniziale (B).",
+          "\u2500\u2500\u2500 STRATEGIE DI INTERVENTO \u2500\u2500\u2500",
+          "Training eccentrico secondo tolleranza, inserito in un programma impairment-based con stretching, rinforzo, stabilizzazione, agilit\u00E0 e corsa progressiva (B); mobilizzazione neurale (F); terapie fisiche per la gestione dei sintomi (F).",
+          "\u2500\u2500\u2500 PREVENZIONE \u2500\u2500\u2500",
+          "Nordic hamstring exercise con riscaldamento, stretching, training di stabilit\u00E0, rinforzo e movimenti funzionali sport-specifici, agilit\u00E0 e corsa ad alta velocit\u00E0 (A).",
+          "\u2500\u2500\u2500 LEGENDA GRADI \u2500\u2500\u2500",
+          "A = evidenza forte (prevalenza di studi di livello I e/o II, con almeno uno di livello I) \u2014 B = evidenza moderata \u2014 C = evidenza debole \u2014 D = evidenza conflittuale \u2014 E = evidenza teorica/fondazionale \u2014 F = opinione degli esperti."
+        ]
+      }
+    ]
+  },
+  {
+    id: 20,
+    category: "Prescrizione Esercizio",
+    color: "#2E6B8A",
+    icon: "\u{1F3CB}\uFE0F",
+    title: "Prescrizione dell'Allenamento contro Resistenza \u2014 ACSM Position Stand 2026",
+    source: "Currier et al. | Med Sci Sports Exerc 2026;58(4):851-872 | American College of Sports Medicine",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC12965823/",
+    pdfUrl2: "https://pmc.ncbi.nlm.nih.gov/articles/PMC12965823/pdf/msse-58-851.pdf",
+    tags: ["esercizio", "forza", "ipertrofia", "potenza", "ACSM", "resistance training", "prescrizione", "carico", "volume", "1RM"],
+    summary: "Position Stand ACSM 2026 sulla prescrizione dell'allenamento contro resistenza per funzione muscolare, ipertrofia e performance fisica in adulti sani. Overview di 137 revisioni sistematiche e oltre 30.000 partecipanti. Aggiorna il Position Stand 2009 'Progression models in resistance training for healthy adults'. Indica quali variabili di prescrizione influenzano realmente gli adattamenti e quali no.",
+    sections: [
+      {
+        title: "Inquadramento e Metodo",
+        content: [
+          "OBIETTIVO: determinare l'impatto delle variabili di prescrizione dell'allenamento contro resistenza (RTx) su funzione muscolare e ipertrofia, con metodi di sintesi delle evidenze. Aggiorna il Position Stand ACSM 2009.",
+          "DISEGNO: overview of reviews (umbrella review), registrata prospetticamente (INPLASY202360071) e condotta secondo PRIOR. Ricerca su Ovid MEDLINE, Emcare, Embase, Cochrane, SPORTDiscus e Web of Science aggiornata a ottobre 2024.",
+          "SELEZIONE: 5751 record dopo rimozione dei duplicati, 137 revisioni sistematiche incluse, oltre 30.000 partecipanti complessivi.",
+          "CRITERI: revisioni sistematiche di trial randomizzati su adulti sani (\u226518 anni) con programma di almeno 6 settimane (range 6-52) e almeno 12 esposizioni, confrontati con gruppo senza esercizio o con prescrizione diversa secondo il principio FITT-VP (Frequenza, Intensit\u00E0, Tempo, Tipo, Volume, Pattern, Progressione).",
+          "QUALIT\u00C0: valutata con AMSTAR (punteggi da 1 a 9 su 11 possibili); qualit\u00E0 delle evidenze (QoE) calcolata con metodo derivato da GRADE ed espressa come percentuale da 0 a 100%.",
+          "POPOLAZIONE: adulti sani senza patologie definite, inclusa l'assenza di obesit\u00E0, sarcopenia e fragilit\u00E0 fisica. Prevalentemente soggetti con esperienza minima o nulla di allenamento contro resistenza.",
+          "\u26A0\uFE0F NOTA DI TRASFERIBILIT\u00C0: le raccomandazioni riguardano adulti sani. L'applicazione a pazienti in riabilitazione o con patologia muscoloscheletrica richiede adattamento clinico e non \u00E8 oggetto di questo documento."
+        ]
+      },
+      {
+        title: "Effetti Rispetto al Non Allenarsi",
+        content: [
+          "Rispetto al controllo senza esercizio, l'allenamento contro resistenza migliora in modo significativo: forza muscolare, ipertrofia, potenza, resistenza muscolare, velocit\u00E0 di contrazione, velocit\u00E0 del cammino, equilibrio e diversi indicatori di funzione fisica.",
+          "FORZA: migliorata da resistance training standard (26 revisioni, n=23.204, QoE 73%), circuit training (3 revisioni, n=843, QoE 92%), elastici (2 revisioni, n=1921), allenamento domiciliare (2 revisioni, n=892) e velocity-based training (2 revisioni, n=870).",
+          "IPERTROFIA: migliorata da resistance training standard (12 revisioni, n=14.924, QoE 79%), circuit training e allenamento con elastici.",
+          "POTENZA: migliorata dal resistance training standard (4 revisioni, n=1001, QoE 63%).",
+          "CROSS-EDUCATION: l'allenamento unilaterale migliora la forza anche nell'arto controlaterale non allenato (2 revisioni, n=1194, QoE 88%) \u2014 rilevante quando un arto \u00E8 immobilizzato o non caricabile.",
+          "FUNZIONE FISICA: migliorati velocit\u00E0 del cammino (8 revisioni, n=3407, QoE 81%), Timed Up-and-Go (5 revisioni, n=1568, QoE 90%), chair stand test (2 revisioni, n=954, QoE 88%) ed equilibrio.",
+          "SALTO: migliorato da flywheel eccentrico e velocity-based training. \u26A0\uFE0F Gli autori precisano che la performance di salto non va considerata un indicatore indiretto della potenza muscolare.",
+          "SPPB: la Short Physical Performance Battery non risulta migliorata dal resistance training standard, ma gli autori attribuiscono il dato alla scarsit\u00E0 di revisioni disponibili (solo 2) pi\u00F9 che a un vero effetto nullo \u2014 le sue singole componenti (cammino, equilibrio, chair stand) risultano tutte migliorate."
+        ]
+      },
+      {
+        title: "Prescrizione per Obiettivo \u2014 Tabella 6",
+        content: [
+          "Le variabili elencate migliorano l'adattamento RISPETTO al resistance training standard, sulla base delle meta-analisi incluse che mostrano un effetto significativo.",
+          "\u2500\u2500\u2500 FORZA \u2500\u2500\u2500",
+          "Frequenza: almeno 2 sessioni a settimana (il limite superiore non \u00E8 determinabile dai dati)",
+          "Intensit\u00E0: carichi \u226580% 1RM, con relazione dose-risposta",
+          "Tipo: flywheel eccentrico",
+          "Tecnica: range di movimento completo",
+          "Volume: 2-3 serie per sessione",
+          "Ordine: esercizio all'inizio della sessione (non alla fine)",
+          "\u2500\u2500\u2500 IPERTROFIA \u2500\u2500\u2500",
+          "Tipo: contrazioni eccentriche / sovraccarico eccentrico",
+          "Volume: almeno 10 serie a settimana per gruppo muscolare, con relazione dose-risposta",
+          "\u2500\u2500\u2500 POTENZA \u2500\u2500\u2500",
+          "Intensit\u00E0: carichi moderati, 30-70% 1RM",
+          "Tipo: flywheel eccentrico",
+          "Tecnica: sollevamento olimpico; power training (fase concentrica alla massima velocit\u00E0 volontaria)",
+          "Volume: basso-moderato (ripetizioni \u00D7 serie \u226424)",
+          "\u2500\u2500\u2500 FUNZIONE FISICA \u2500\u2500\u2500",
+          "Funzione multicomponente, SPPB e performance nel cammino: migliorate dal power training",
+          "Performance di corsa e di salto: migliorate dal velocity-based training",
+          "Resistenza muscolare, velocit\u00E0 del cammino, TUG, chair stand ed equilibrio: dati insufficienti per indicare una prescrizione ottimale, pur essendo tutti migliorati dall'allenamento in s\u00E9"
+        ]
+      },
+      {
+        title: "Variabili che NON Modificano gli Adattamenti",
+        content: [
+          "Questo \u00E8 forse il contributo pi\u00F9 rilevante del documento: molte variabili tradizionalmente considerate decisive non risultano determinanti.",
+          "CEDIMENTO MUSCOLARE: allenare fino al cedimento non migliora forza, ipertrofia n\u00E9 potenza, quindi non \u00E8 necessario. Pu\u00F2 anzi essere sconsigliabile in alcune popolazioni (per esempio anziani) per rischi vascolari e per il maggior rischio di infortunio legato al decadimento della tecnica. Un'intensit\u00E0 di sforzo adeguata si ottiene lavorando 'near-failure', con circa 2-3 ripetizioni di riserva (RIR).",
+          "MACCHINE O PESI LIBERI: nessuna differenza sulla forza.",
+          "SUPERFICI INSTABILI: nessun vantaggio sulla forza rispetto a superfici stabili.",
+          "TEMPO SOTTO TENSIONE: contrazioni rapide (<2 s) ed esecuzioni lente (>2 s) producono risultati equivalenti su forza e ipertrofia; anche il confronto tra ripetizioni da 0.5 s e da 8 s non mostra differenze sull'ipertrofia.",
+          "ORARIO DELLA GIORNATA: allenarsi al mattino o alla sera non cambia i risultati.",
+          "RECUPERO TRA LE SERIE: recuperi brevi (<1 min) e lunghi (>1 min) non modificano la forza.",
+          "TIPO DI CONTRAZIONE PER LA FORZA: eccentrico e concentrico equivalenti (mentre per l'ipertrofia l'eccentrico risulta superiore).",
+          "STRUTTURA DELLE SERIE: cluster set, drop set, complex e contrast non producono vantaggi consistenti su forza o potenza.",
+          "PERIODIZZAZIONE: non risulta superiore ai programmi non periodizzati per forza e ipertrofia. Gli autori concludono che \u00E8 meno importante di quanto ipotizzato nei Position Stand precedenti, a condizione che ci sia un adeguato sovraccarico progressivo.",
+          "FREQUENZA PER L'IPERTROFIA: da 1 a oltre 5 giorni a settimana non fa differenza, se il volume totale \u00E8 equiparato.",
+          "CARICO PER L'IPERTROFIA: dal 30% al 100% 1RM non fa differenza \u2014 l'ipertrofia dipende dal volume, non dal carico.",
+          "RESTRIZIONE DEL FLUSSO EMATICO (BFR): non migliora l'ipertrofia rispetto al training standard. \u26A0\uFE0F Gli autori segnalano un limite metodologico: i protocolli BFR confrontano spesso carichi diversi, quindi l'effetto della restrizione non \u00E8 separabile da quello del carico.",
+          "ORDINE DEGLI ESERCIZI PER L'IPERTROFIA: non influente (mentre per la forza conta \u2014 l'esercizio prioritario va messo all'inizio)."
+        ]
+      },
+      {
+        title: "Principi di Programmazione",
+        content: [
+          "RACCOMANDAZIONE PRIMARIA DEGLI AUTORI: gli adulti sani dovrebbero eseguire resistance training con sforzo elevato almeno due volte a settimana, coinvolgendo tutti i principali gruppi muscolari.",
+          "SOVRACCARICO PROGRESSIVO: necessario per il progresso a lungo termine, ma non indispensabile per ottenere benefici. Pu\u00F2 essere realizzato aumentando carico, volume, frequenza, selezione degli esercizi o durata; oppure mantenendo lo stesso carico relativo tramite test di forza periodici o scale di sforzo percepito.",
+          "VOLUME \u2014 DOSE-RISPOSTA E PLATEAU: una serie \u00E8 meglio di zero, due sono meglio di una. Una meta-regressione mostra per\u00F2 rendimenti decrescenti oltre circa 2-3 serie per esercizio per la forza e oltre circa 18-20 serie settimanali per l'ipertrofia. Indicazione minima: almeno 2 serie per esercizio.",
+          "INDIVIDUALIZZAZIONE: gli autori la pongono davanti alla conformit\u00E0 a criteri prescrittivi rigidi. Programmi individualizzati aumentano adozione e aderenza, ed \u00E8 questo, non l'ottimizzazione dei parametri, il vero fattore limitante nella popolazione.",
+          "SPECIFICIT\u00C0: gli adattamenti sono specifici allo stimolo applicato, ma nei soggetti non avanzati si osserva un considerevole trasferimento tra domini di performance.",
+          "SUDDIVISIONE DEL CORPO: secondo gli autori \u00E8 sufficiente ragionare per quattro regioni \u2014 superiore e inferiore, spinta e trazione \u2014 eventualmente sei, distinguendo orizzontale e verticale per l'arto superiore.",
+          "DIFFERENZA TRA MIGLIORAMENTO SIGNIFICATIVO E OTTIMALE: sono due obiettivi distinti. Miglioramenti significativi si ottengono con moltissimi programmi diversi; l'ottimizzazione riguarda solo poche variabili."
+        ]
+      },
+      {
+        title: "Sicurezza e Contesto",
+        content: [
+          "SICUREZZA: il resistance training \u00E8 sicuro per adulti sani di tutte le et\u00E0. In un'analisi su oltre 38.000 partecipanti (di cui oltre 6700 impegnati in resistance training e oltre 11.000 anziani), l'esercizio non ha aumentato il rischio di eventi avversi gravi.",
+          "EVENTI AVVERSI NON GRAVI (dolore, affaticamento, borsite, edema): incidenza e rischio non diversi rispetto all'esercizio aerobico.",
+          "COMPLICANZE CARDIOVASCOLARI: pi\u00F9 rare nel resistance training che nell'allenamento aerobico. In 23 studi su adulti con cardiopatia coronarica (n=1174), tutte le 63 complicanze cardiovascolari non fatali si sono verificate durante l'allenamento aerobico; le 20 complicanze muscoloscheletriche durante il resistance training erano dovute a condizioni preesistenti (artrosi di ginocchio) e si sono risolte modificando intensit\u00E0 o posizione.",
+          "BENEFICI OLTRE IL MUSCOLO: riduzione della mortalit\u00E0, del rischio e nella gestione di malattie cardiovascolari, cancro e diabete; riduzione della depressione; miglioramento della qualit\u00E0 del sonno.",
+          "PARTECIPAZIONE: solo circa il 30% degli adulti americani svolge attivit\u00E0 di rinforzo muscolare almeno 2 giorni a settimana e quasi il 60% non ne svolge alcuna. Tra gli anziani le stime variano dall'1% al 40%.",
+          "PERCH\u00C9 IL DOCUMENTO CAMBIA IMPOSTAZIONE: le linee guida precedenti, secondo alcune stime, avrebbero richiesto fino a 20 ore settimanali di allenamento per sviluppare fitness muscolare completa. Gli autori considerano quelle indicazioni poco rilevanti per la maggior parte degli adulti e propongono una gamma molto pi\u00F9 ampia di programmi efficaci.",
+          "FORME NON TRADIZIONALI: elastici e allenamento domiciliare producono benefici apprezzabili (forza, ipertrofia, resistenza muscolare, equilibrio) e rappresentano alternative pi\u00F9 accessibili."
+        ]
+      },
+      {
+        title: "Limiti dello Studio",
+        content: [
+          "Le overview of reviews forniscono evidenze aggregate a livello di gruppo: deviazioni motivate dalle raccomandazioni saranno necessarie in molti casi, secondo il principio di individualizzazione.",
+          "Il metodo non consente inferenze sull'efficacia comparativa tra interventi diversi: per confrontare e ordinare programmi distinti servono network meta-analisi.",
+          "SOVRAPPOSIZIONE DEGLI STUDI: il rischio di conteggiare pi\u00F9 volte gli stessi studi primari \u00E8 stato quantificato con l'indice CCA solo per la forza, dove risulta moderato (6-10%). Per gli altri esiti serve cautela.",
+          "La sintesi \u00E8 limitata a ci\u00F2 che le revisioni sistematiche disponibili hanno esaminato: dove le revisioni sono poche, l'assenza di effetto pu\u00F2 riflettere scarsit\u00E0 di dati e non un vero effetto nullo (\u00E8 il caso della SPPB).",
+          "Evidenza insufficiente per quantificare target precisi di RIR o di sforzo percepito, pur essendo questi approcci promettenti perch\u00E9 trasferibili a elastici e carico naturale.",
+          "Le evidenze non hanno confrontato distinte regioni corporee o gruppi muscolari specifici.",
+          "Gli autori segnalano infine che i trial randomizzati in medicina dello sport sono spesso di qualit\u00E0 modesta: campioni piccoli, randomizzazione carente, assenza di preregistrazione e reporting inadeguato degli eventi avversi."
+        ]
+      }
+    ]
+  },
+  {
+    id: 21,
+    category: "Spalla",
+    color: "#5C3A8C",
+    icon: "\u{1F4AA}",
+    title: "Artrosi Gleno-Omerale e Protesi Totale di Spalla \u2014 CPG APTA 2023",
+    source: "Michener et al. | Phys Ther 2023;103(6):pzad041 | American Physical Therapy Association",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC10256270/",
+    pdfUrl2: "https://academic.oup.com/ptj/article/103/6/pzad041/7146561",
+    tags: ["spalla", "artrosi", "GHOA", "protesi", "TSA", "artroplastica", "tutore", "sottoscapolare", "CPG"],
+    summary: "Linea guida APTA per la gestione fisioterapica dell'artrosi gleno-omerale (GHOA) e dei pazienti sottoposti a protesi totale di spalla (TSA). Copre gestione conservativa, pre-operatoria e post-operatoria. Non riguarda protesi inversa, revisioni, emiartroplastica, et\u00E0 pediatrica o artrite reumatoide primaria.",
+    sections: [
+      {
+        title: "Epidemiologia e Fattori di Rischio",
+        content: [
+          "Alterazioni degenerative gleno-omerali sono visibili radiograficamente nel 17-20% degli adulti sopra i 65 anni.",
+          "Alterazioni degenerative della gleno-omerale si riscontrano fino al 17% dei pazienti con dolore di spalla.",
+          "La condizione \u00E8 pi\u00F9 frequente nelle donne, ma il sesso femminile non risulta un fattore di rischio indipendente.",
+          "FATTORI DI RISCHIO: et\u00E0, genetica, carico articolare, occupazione, stabilit\u00E0 e integrit\u00E0 gleno-omerale, artropatia della cuffia, morfologia scapolare.",
+          "FATTORI AMBIENTALI: lavori pesanti con carico sulla spalla e sport overhead possono contribuire allo sviluppo.",
+          "L'obesit\u00E0 non risulta un fattore di rischio indipendente per la GHOA, a differenza di quanto avviene per l'artrosi degli arti inferiori.",
+          "PATOANATOMIA: perdita della cartilagine della testa omerale con successive modificazioni adattative dell'osso subcondrale e sviluppo di osteofiti. Nell'artrosi aumenta l'attivit\u00E0 di collagenasi e metalloproteasi, con incremento del contenuto d'acqua, disorganizzazione della trama collagenica e degradazione dei proteoglicani.",
+          "IMPATTO: qualit\u00E0 di vita e funzione del braccio, in particolare attivit\u00E0 sopra la testa e movimenti che richiedono rotazione esterna. Frequenti disturbi del sonno per difficolt\u00E0 di addormentamento e dolore notturno.",
+          "FATTORI PSICOLOGICI: ansia e depressione influenzano la percezione del dolore e gli esiti. Punteggi pre-operatori pi\u00F9 elevati di depressione e ansia si associano a minori miglioramenti post-operatori di funzione e dolore. Considerare uno strumento di screening come l'OSPRO-YF.",
+          "PROTESI: annualmente circa 53.000 adulti negli Stati Uniti ricevono una protesi gleno-omerale, il 4% di tutte le artroprotesi; \u00E8 il terzo intervento di sostituzione articolare pi\u00F9 eseguito dopo anca e ginocchio."
+        ]
+      },
+      {
+        title: "Diagnosi \u2014 Raccomandazioni Graduate",
+        content: [
+          "\u2500\u2500\u2500 ANAMNESI, ESAME FISICO E RADIOGRAFIA (qualit\u00E0 moderata, forza \u2666\u2666\u2666\u25CA) \u2500\u2500\u2500",
+          "Anamnesi, esame fisico e radiografie sono utili per la diagnosi differenziale di GHOA; in particolare l'angolo critico di spalla (critical shoulder angle) alla radiografia e l'et\u00E0 risultano predittivi.",
+          "ANGOLO CRITICO DI SPALLA: angolo tra la linea che congiunge i margini ossei superiore e inferiore della cavit\u00E0 glenoidea (parallela alla superficie glenoidea) e una seconda linea dal bordo infero-laterale dell'acromion al margine glenoideo inferiore. Una sua riduzione nelle radiografie antero-posteriori vere risulta utile alla diagnosi.",
+          "ET\u00C0: utile per differenziare la GHOA da condizioni simili \u2014 et\u00E0 maggiore nell'artropatia della cuffia, minore nelle lesioni della cuffia dei rotatori.",
+          "CRITERI CLINICI (percorsi NHS Evidence-Based Interventions): dolore di spalla da oltre 3 mesi; assenza di instabilit\u00E0 e di dolore localizzato all'acromion-claveare all'esame manuale; riduzione globale del ROM con perdita maggiore nella rotazione esterna passiva a braccio al fianco; radiografie di conferma.",
+          "DIAGNOSI DIFFERENZIALE: patologia tendinea della cuffia, capsulite adesiva, lesioni del labbro.",
+          "\u2500\u2500\u2500 RISONANZA MAGNETICA (qualit\u00E0 alta, forza \u2666\u2666\u2666\u2666) \u2500\u2500\u2500",
+          "La RM senza contrasto \u00E8 utile per CONFERMARE la diagnosi di GHOA, ma meno utile per ESCLUDERLA.",
+          "Un sistema di grading RM per la severit\u00E0 dell'artrosi di spalla \u00E8 affidabile e utile per individuare l'artrosi precoce, classificarne la severit\u00E0 e monitorarne la progressione.",
+          "SEQUENZA DIAGNOSTICA: primo passo esame clinico e radiografie; la RM \u00E8 indicata se la diagnosi resta incerta. \u26A0\uFE0F L'imaging avanzato aumenta i costi dell'assistenza.",
+          "ECOGRAFIA: non inclusa nelle raccomandazioni per assenza di letteratura disponibile."
+        ]
+      },
+      {
+        title: "Gestione Post-Operatoria \u2014 Raccomandazioni Graduate",
+        content: [
+          "\u2500\u2500\u2500 TUTORE ED ESERCIZIO (qualit\u00E0 alta, forza \u2666\u2666\u2666\u2666) \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO utilizzare tutore ed esercizi progressivi di ROM e rinforzo per migliorare gli esiti riferiti dal paziente e il ROM nei pazienti con GHOA sottoposti a TSA.",
+          "PROTOCOLLO DELLO STUDIO DI RIFERIMENTO: tutore per 4 settimane, seguito da 4 settimane di ROM progressivo assistito e attivo, quindi esercizi di rinforzo.",
+          "RCT su 60 pazienti: il movimento immediato (flessione e rotazione esterna fino a 30\u00B0) ha prodotto miglioramenti pi\u00F9 precoci di ROM e funzione (ASES) a 4 e 8 settimane rispetto al movimento ritardato, ma nessuna differenza di ROM, dolore o funzione a 1 anno.",
+          "\u2500\u2500\u2500 POSIZIONE DEL TUTORE (qualit\u00E0 moderata, forza \u2666\u2666\u2666\u25CA) \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO utilizzare un tutore con spalla in rotazione neutra per la gestione del dolore dopo TSA.",
+          "RCT su 36 pazienti, 6 settimane di immobilizzazione: il gruppo in rotazione neutra ha mostrato meno dolore notturno a 2 settimane e maggiore ROM in rotazione esterna a 1 anno rispetto al tutore tradizionale in rotazione interna (avambraccio contro l'addome).",
+          "Entrambe le posizioni hanno prodotto miglioramenti significativi di dolore, funzione (DASH, WOOS, SANE) e ROM.",
+          "\u2500\u2500\u2500 TIMING DEL ROM (qualit\u00E0 moderata, forza \u2666\u2666\u2666\u25CA) \u2500\u2500\u2500",
+          "L'introduzione degli esercizi di ROM PU\u00D2 essere ritardata fino a 4 settimane senza impatto negativo sugli esiti riferiti dal paziente.",
+          "\u26A0\uFE0F DATO CRITICO: la mancata guarigione dell'osteotomia della piccola tuberosit\u00E0 \u00E8 risultata pi\u00F9 frequente nel gruppo con ROM immediato (5/27 = 19%) rispetto al gruppo ritardato (1/28 = 4%).",
+          "La compromissione della guarigione del sottoscapolare o dell'osteotomia comporta pi\u00F9 dolore, instabilit\u00E0 e riduzione della rotazione interna attiva.",
+          "INDICAZIONI OPERATIVE: limitare inizialmente la rotazione esterna a 30\u00B0 per non stressare il sito di osteotomia; la protezione del sottoscapolare in fase di guarigione deve essere l'obiettivo primario; il ROM precoce va individualizzato secondo paziente e tipo di intervento.",
+          "Il lavoro sugli altri distretti del quadrante superiore \u2014 collo, gomito, mano \u2014 non \u00E8 precluso e va comunque mantenuto."
+        ]
+      },
+      {
+        title: "Best Practice Statements (evidenza insufficiente, \u2666\u25CA\u25CA\u25CA)",
+        content: [
+          "Queste raccomandazioni derivano dall'opinione del gruppo di sviluppo in assenza di studi di qualit\u00E0 alta o moderata.",
+          "PRE-OPERATORIO: la fisioterapia pre-operatoria PU\u00D2 migliorare gli esiti post-operatori nei pazienti candidati a TSA. Nessuno studio diretto \u00E8 disponibile: la raccomandazione si basa sui benefici documentati per anca e ginocchio (miglior conoscenza e aspettative del paziente, migliore funzione, ridotta degenza, minor dolore, maggiore forza del quadricipite). Il trattamento dovrebbe comprendere esercizio, gestione del dolore ed educazione sulle aspettative funzionali, e andrebbe offerto almeno 6 settimane prima dell'intervento.",
+          "CONSERVATIVO: la fisioterapia PU\u00D2 beneficiare i pazienti con GHOA che non hanno subito TSA. Una coorte prospettica su 129 anziani (65+) trattati con FANS, infiltrazioni di corticosteroide e acido ialuronico, educazione e fisioterapia con ROM e rinforzo ha mostrato miglioramenti di funzione percepita, dolore, salute mentale e qualit\u00E0 di vita a 3 anni di follow-up.",
+          "SCELTA DELL'INTERVENTO: nessun singolo intervento fisioterapico risulta superiore a un altro nella GHOA. La selezione va guidata da migliore evidenza disponibile, esperienza clinica e valori del paziente, oltre che dalla valutazione individuale e dal livello di irritabilit\u00E0 dei tessuti.",
+          "TEMPI DEL CONSERVATIVO: lo studio citato suggerisce 12 mesi di trattamento conservativo prima di valutare l'indicazione all'artroprotesi.",
+          "POST-OPERATORIO: la fisioterapia post-operatoria PU\u00D2 migliorare gli esiti funzionali riferiti dal paziente. L'unico studio disponibile \u00E8 di bassa qualit\u00E0 e non ha trovato differenze tra fisioterapia formale e programma domiciliare guidato dal medico, ma non controllava volume di esercizio n\u00E9 aderenza.",
+          "EDEMA: la gestione dell'edema dopo TSA deve basarsi su migliore evidenza, esperienza clinica e valori del paziente. Ghiaccio, compressione ed elevazione sono comunemente usati; l'edema prolungato pu\u00F2 interferire con la guarigione e il drenaggio linfatico manuale pu\u00F2 essere considerato nei casi di edema esteso o persistente.",
+          "\u26A0\uFE0F RISCHIO DI CADUTA POST-TSA: in uno studio su 198 pazienti operati di protesi di spalla, il 10.6% ha riportato una caduta dopo il rientro a domicilio con accesso al pronto soccorso e riospedalizzazione, per lesioni in sedi diverse dalla spalla o per frattura periprotesica dell'omero."
+        ]
+      },
+      {
+        title: "Outcome Measures e Sistema di Grading",
+        content: [
+          "VALUTAZIONE: ROM passivo e attivo, forza, dolore, antropometria e meccanica del complesso della spalla, insieme a misure di esito riferite dal paziente.",
+          "CONDIZIONE-SPECIFICA: WOOS (Western Ontario Osteoarthritis of the Shoulder Index), progettata specificamente per valutare sintomi, funzione, disabilit\u00E0 ed emozioni nell'artrosi di spalla.",
+          "ARTO SUPERIORE: DASH o la versione breve QuickDASH.",
+          "SPALLA-SPECIFICHE: SPADI, Penn Shoulder Score, Simple Shoulder Test, ASES.",
+          "PI\u00D9 RESPONSIVE DOPO TSA: ASES e WOOS risultano le pi\u00F9 responsive tra le misure specifiche per arto e per condizione nei pazienti sottoposti a TSA.",
+          "PAZIENTE-SPECIFICHE: PSFS (Patient-Specific Functional Scale) per guidare la cura individuale; utile un ancoraggio interpretativo come il Patient Acceptable Symptom State, o semplicemente chiedere al paziente se \u00E8 soddisfatto della propria condizione attuale.",
+          "\u2500\u2500\u2500 LEGENDA FORZA DELLE RACCOMANDAZIONI \u2500\u2500\u2500",
+          "\u2666\u2666\u2666\u2666 FORTE: alto grado di certezza di beneficio da moderato a sostanziale (prevalenza di evidenza di livello I o II con almeno uno studio di livello I) \u2014 obbligo: 'deve' o 'dovrebbe'",
+          "\u2666\u2666\u2666\u25CA MODERATA: alto grado di certezza di beneficio da lieve a moderato (prevalenza di livello II o singolo RCT di alta qualit\u00E0) \u2014 obbligo: 'dovrebbe'",
+          "\u2666\u2666\u25CA\u25CA DEBOLE: moderato grado di certezza di beneficio lieve (livelli II-V) \u2014 obbligo: 'pu\u00F2'",
+          "\u2666\u25CA\u25CA\u25CA TEORICA/BEST PRACTICE: evidenza da studi su cadavere o animale, modelli concettuali, opinione esperta pubblicata, o norme di pratica clinica corrente"
+        ]
+      }
+    ]
+  },
+  {
+    id: 22,
+    category: "Geriatria",
+    color: "#2E6B4F",
+    icon: "\u{1F9D3}",
+    title: "Gestione del Rischio di Caduta nell'Anziano \u2014 CPG APTA-Geriatrics 2025",
+    source: "Kirk-Sanchez et al. | J Geriatr Phys Ther 2025;48(2):62-87 | APTA-Geriatrics",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC12533762/",
+    pdfUrl2: "https://www.ovid.com/jnls/jgpt/fulltext/10.1519/jpt.0000000000000454~physical-therapy-management-of-fall-risk-in",
+    tags: ["cadute", "anziano", "equilibrio", "esercizio multicomponente", "Tai Chi", "screening", "geriatria", "CPG"],
+    summary: "Linea guida APTA-Geriatrics per la gestione fisioterapica del rischio di caduta negli anziani (65+) che vivono in comunit\u00E0. L'esercizio multicomponente con training dell'equilibrio progressivo e impegnativo \u00E8 l'intervento centrale. Non riguarda anziani istituzionalizzati n\u00E9 popolazioni con patologie specifiche come il Parkinson, per le quali esistono documenti dedicati.",
+    sections: [
+      {
+        title: "Implicazioni Cliniche e Sintesi",
+        content: [
+          "L'esercizio multicomponente \u00E8 l'intervento pi\u00F9 importante per affrontare cadute e rischio di caduta nell'anziano.",
+          "L'esercizio multicomponente DEVE includere esercizi di equilibrio progressivi e sufficientemente impegnativi, e pu\u00F2 comprendere altre modalit\u00E0 di esercizio.",
+          "I fisioterapisti possono usare l'algoritmo evidence-based per guidare il ragionamento clinico nella gestione del rischio di caduta.",
+          "\u2500\u2500\u2500 EPIDEMIOLOGIA \u2500\u2500\u2500",
+          "Definizione di caduta (ProFaNE e CMS): evento inatteso o non intenzionale in cui la persona si ritrova a terra, sul pavimento o a un livello inferiore.",
+          "Dati 2020 negli Stati Uniti: il 27.6% degli anziani riferisce almeno una caduta nell'anno precedente, per oltre 14 milioni di cadute complessive e quasi 39.000 decessi correlati.",
+          "Tasso di mortalit\u00E0 aggiustato per et\u00E0: 78 per 100.000, in aumento nell'ultimo decennio.",
+          "Costi: oltre 50 miliardi di dollari l'anno negli Stati Uniti, con proiezione a 100 miliardi entro il 2030.",
+          "Nel mondo le cadute sono la seconda causa di morte per lesione non intenzionale, con circa 684.000 decessi l'anno.",
+          "Quasi met\u00E0 delle cadute negli anziani \u00E8 attribuibile a fattori modificabili, come fattori ambientali o deficit di equilibrio e cammino.",
+          "FATTORI PREDISPONENTI: et\u00E0 avanzata, caduta precedente, depressione, demenza, comorbidit\u00E0, farmaci psicotropi, calzature."
+        ]
+      },
+      {
+        title: "Screening e Classificazione del Rischio",
+        content: [
+          "Il processo di screening comprende domande di anamnesi medica, misure self-report e misure di performance, in linea con il programma STEADI dei CDC.",
+          "\u2500\u2500\u2500 MISURE SELF-REPORT \u2500\u2500\u2500",
+          "Falls Efficacy Scale-International: punteggio superiore a 24 indica rischio aumentato di caduta.",
+          "Geriatric Depression Scale-15: cut-off superiore a 6 \u2014 la depressione si associa a mobilit\u00E0 compromessa e a maggiore incidenza di cadute.",
+          "\u2500\u2500\u2500 MISURE DI PERFORMANCE E CUT-OFF \u2500\u2500\u2500",
+          "Timed Up and Go (TUG): oltre 11 secondi indica rischio di caduta",
+          "Five Times Sit-to-Stand: oltre 12 secondi indica rischio di caduta",
+          "Appoggio monopodalico a occhi aperti: incapacit\u00E0 di mantenerlo oltre 6.5 secondi indica rischio aumentato",
+          "Berg Balance Scale: punteggio inferiore a 50 indica rischio di caduta",
+          "Velocit\u00E0 del cammino autoselezionata: inferiore a 1.0 m/s indica rischio di caduta",
+          "\u2500\u2500\u2500 CLASSIFICAZIONE AD ALTO RISCHIO \u2500\u2500\u2500",
+          "Secondo il gruppo di sviluppo vanno classificati ad alto rischio i soggetti con storia di cadute multiple o lesive, fragilit\u00E0 e/o deficit di equilibrio identificato da test validati.",
+          "\u26A0\uFE0F La perdita di coscienza pre-caduta e la sincope sono considerate questioni distinte e fuori dall'ambito di questa linea guida.",
+          "\u2500\u2500\u2500 ESAME APPROFONDITO \u2500\u2500\u2500",
+          "I test con miglior valore predittivo identificano CHI \u00E8 ad alto rischio, ma non i deficit specifici nei sottodomini dell'equilibrio che guidano la scelta dell'intervento.",
+          "BESTest e Mini-BESTest possono essere particolarmente rilevanti perch\u00E9 caratterizzano l'equilibrio in stazione eretta e durante il cammino attraverso pi\u00F9 sottodomini, informando meglio la pianificazione del trattamento. Sono disponibili cut-off standardizzati per et\u00E0."
+        ]
+      },
+      {
+        title: "Programmi Multifattoriali \u2014 Raccomandazione Forte",
+        content: [
+          "RACCOMANDAZIONE (Qualit\u00E0 evidenza I, Forza: FORTE): i fisioterapisti dovrebbero partecipare a programmi di gestione multifattoriale del rischio di caduta.",
+          "Definizione ProFaNE: interventi in cui due o pi\u00F9 sottodomini possono essere erogati ai partecipanti, collegati al profilo di rischio individuale, cos\u00EC che non tutti ricevano la stessa combinazione.",
+          "COMPONENTI: screening, valutazione, invio ai professionisti appropriati e interventi entro l'ambito di competenza del fisioterapista.",
+          "EVIDENZA: 8 revisioni sistematiche di alta qualit\u00E0 e 9 di qualit\u00E0 accettabile.",
+          "EFFETTO: riduzione del tasso di cadute di circa il 25%; effetti maggiori (35-36%) quando gli interventi includono esercizio o modifiche ambientali, e con componenti pi\u00F9 attive (26-36%) rispetto a sola educazione, invii o informazione.",
+          "ALTO RISCHIO: riduzione del tasso di cadute del 23% nei soggetti ad alto rischio, mentre non si osserva effetto negli studi che non selezionavano per alto rischio.",
+          "DURATA: gli interventi multifattoriali di durata inferiore a 12 mesi risultano efficaci, quelli superiori a 12 mesi no.",
+          "Le riduzioni del TASSO di caduta risultano maggiori di quelle del RISCHIO di caduta.",
+          "\u26A0\uFE0F Un'analisi che riportava un'efficacia del 36% comprendeva per\u00F2 anche interventi di esercizio multicomponente nella definizione di multifattoriale, con probabile sovrastima dell'effetto."
+        ]
+      },
+      {
+        title: "Esercizio Multicomponente \u2014 Raccomandazione Forte",
+        content: [
+          "RACCOMANDAZIONE (Qualit\u00E0 evidenza I, Forza: FORTE): un programma di esercizio multicomponente che incorpora training dell'equilibrio e altre modalit\u00E0, come rinforzo o Tai Chi, \u00E8 fortemente raccomandato per ridurre rischio e tasso di cadute.",
+          "EVIDENZA: 14 revisioni sistematiche di qualit\u00E0 alta o moderata su programmi multicomponente, 10 su programmi misti, 4 di qualit\u00E0 inferiore senza meta-analisi.",
+          "EFFETTO: riduzione del tasso di cadute del 21-28% e del rischio del 22-27%. Negli anziani non fragili la riduzione del tasso sale al 31%.",
+          "Quando l'esercizio multicomponente fa parte di un programma multifattoriale: riduzione del 34% del tasso e del 21% del rischio.",
+          "\u2500\u2500\u2500 DOSAGGIO E INTENSIT\u00C0 (Qualit\u00E0 I, Forza FORTE) \u2500\u2500\u2500",
+          "Programmi con oltre 150 minuti settimanali riducono le cadute del 47%, contro il 12% dei programmi sotto i 150 minuti.",
+          "Durata ottimale 6-12 mesi: riduzione del rischio del 36% e del tasso del 33%, superiore a programmi pi\u00F9 brevi o pi\u00F9 lunghi di 12 mesi.",
+          "Le maggiori riduzioni si osservano con training dell'equilibrio ad alta intensit\u00E0 e alta sfida, dosi superiori a 50 ore complessive e frequenza superiore a 3 ore a settimana. Programmi con oltre 3 ore settimanali e training di equilibrio e funzionale mostrano fino al 50% di riduzione delle cadute.",
+          "\u26A0\uFE0F I programmi che includevano programmi di cammino mostravano riduzioni inferiori.",
+          "La combinazione pi\u00F9 efficace (riduzione del rischio del 35%) includeva tutte le categorie di esercizio: cammino, equilibrio e training funzionale, rinforzo, flessibilit\u00E0 e 3D training come Tai Chi o danza.",
+          "\u2500\u2500\u2500 EFFETTI A LUNGO TERMINE \u2500\u2500\u2500",
+          "Negli studi con follow-up oltre 12 mesi: riduzione del 21% del tasso e del 17% del rischio; oltre 24 mesi, 20% e 21%. Il beneficio dei programmi di esercizio pu\u00F2 dunque estendersi per molti mesi dopo il termine dell'intervento.",
+          "\u2500\u2500\u2500 GRUPPO O INDIVIDUALE \u2500\u2500\u2500",
+          "Nessuna differenza dimostrata tra erogazione in gruppo e individuale (26% vs 19% di riduzione del tasso, intervalli di confidenza sovrapposti). Preferenza del paziente, disponibilit\u00E0 e costo possono guidare la scelta.",
+          "SICUREZZA: i programmi multicomponente risultano sicuri, con la grande maggioranza degli studi che non riporta eventi avversi. Gli eventi segnalati includono cadute durante l'esercizio, dolore, indolenzimento muscolare, stiramenti, lombalgia e aritmie."
+        ]
+      },
+      {
+        title: "Training dell'Equilibrio",
+        content: [
+          "RACCOMANDAZIONE (Qualit\u00E0 I, Forza FORTE): gli interventi di training dell'equilibrio devono essere progressivi e sufficientemente impegnativi, coinvolgere movimenti degli arti e di tutto il corpo, comportare modifiche della base di appoggio e ridurre il supporto degli arti superiori.",
+          "EFFETTO: riduzione del tasso di cadute del 28% e del rischio del 19%; in altre analisi 24% e 13%.",
+          "\u2500\u2500\u2500 FRAMEWORK DEL CONTROLLO POSTURALE \u2500\u2500\u2500",
+          "STEADY STATE: controllo della posizione del centro di massa entro la base di appoggio in condizioni prevedibili e quasi statiche.",
+          "ANTICIPATORIO: generazione di aggiustamenti posturali prima o durante un movimento volontario, per contrastare una perturbazione attesa o riallineare il centro di massa.",
+          "REATTIVO: risposta a input sensoriali che segnalano la necessit\u00E0 di un aggiustamento per mantenere il controllo posturale.",
+          "\u2500\u2500\u2500 STEP TRAINING VOLONTARIO \u2500\u2500\u2500",
+          "Passi autodiretti o guidati verbalmente o visivamente, eseguiti in pi\u00F9 direzioni (avanti, indietro, laterale). Gli studi impiegano bersagli di appoggio in condizioni cognitive variate, square-stepping ed exergaming.",
+          "EFFETTO: riduzione del rischio di caduta del 58% e del tasso del 57%. Complessivamente lo step training riduce il tasso del 52% e il rischio del 49%.",
+          "\u2500\u2500\u2500 STEP TRAINING REATTIVO (Qualit\u00E0 II, Forza DEBOLE) \u2500\u2500\u2500",
+          "Interventi individualizzati con perturbazioni esterne in stazione eretta o durante il cammino, a terra, su treadmill o in ambiente virtuale.",
+          "EFFETTO: riduzione del rischio del 40% e del tasso del 48%.",
+          "\u26A0\uFE0F L'evidenza \u00E8 mista e complessivamente di qualit\u00E0 inferiore rispetto allo step training volontario, e resta incerto se le perturbazioni indotte in laboratorio si traducano in riduzione delle cadute in comunit\u00E0. Alcuni protocolli richiedono tecnologia complessa, con costi e formazione del personale.",
+          "\u2500\u2500\u2500 GAIT ADAPTABILITY TRAINING \u2500\u2500\u2500",
+          "Modificare rapidamente e in modo appropriato il cammino in risposta a sfide ambientali: evitare o accomodare ostacoli, appoggiare su bersagli specifici.",
+          "EFFETTO: riduzione del tasso di cadute del 42% con certezza moderata; riduzione delle fratture correlate a caduta dell'81% e del rischio del 43%, ma con certezza bassa o molto bassa perch\u00E9 basate su soli due studi.",
+          "\u2500\u2500\u2500 PRINCIPI DI PROGRESSIONE \u2500\u2500\u2500",
+          "Il supporto degli arti superiori va ridotto nel tempo; la base di appoggio va ridotta per sfidare l'equilibrio in stazione e nel cammino; i movimenti di arti e corpo devono avvenire in condizioni sia volontarie sia reattive.",
+          "INDIVIDUALIZZAZIONE: se la paura \u00E8 un fattore, la progressione deve essere incrementale usando la fiducia nell'equilibrio come guida; se lo \u00E8 l'uso dell'informazione sensoriale, lo step training va condotto in condizioni sensoriali variate e alterate.",
+          "VARIABILI MANIPOLABILI: condizioni sensoriali (riduzione o eliminazione della vista, superfici cedevoli), compiti cognitivi o motori concomitanti, direzione della perturbazione (antero-posteriore, laterale), contesto del compito (stazione eretta, cammino).",
+          "SICUREZZA: il rischio di entrambe le forme di step training \u00E8 la caduta durante la seduta, evitabile con imbragatura completa e/o assistenza e supervisione individualizzata."
+        ]
+      },
+      {
+        title: "Rinforzo, Tai Chi, Educazione e Ambiente",
+        content: [
+          "\u2500\u2500\u2500 RINFORZO DA SOLO \u2014 NON RACCOMANDATO (Qualit\u00E0 II, Forza MODERATA) \u2500\u2500\u2500",
+          "Prescrivere il rinforzo COME UNICA MODALIT\u00C0 per ridurre rischio e tasso di cadute NON \u00E8 raccomandato: offre benefici limitati.",
+          "I rate ratio hanno valore clinicamente poco rilevante con intervalli di confidenza non significativi: due meta-analisi riportano rate ratio superiore a 1.0, una nessun cambiamento, una sola una riduzione. Sul rischio, tre studi su tre riportano ratio tra 0.81 e 1.00 con intervalli non significativi.",
+          "PROTOCOLLI TIPICI DEGLI STUDI: sedute di gruppo da 50 minuti, 2-3 volte a settimana, per 25-52 settimane. Nessuno ha dimostrato riduzione del tasso o del rischio di caduta.",
+          "\u26A0\uFE0F PRECISAZIONE IMPORTANTE: nei pazienti con deficit identificati resta standard di pratica fornire esercizi di rinforzo progressivi e personalizzati, ma all'interno di un piano multicomponente, non isolatamente.",
+          "\u2500\u2500\u2500 TAI CHI (Qualit\u00E0 I, Forza FORTE) \u2500\u2500\u2500",
+          "Fortemente raccomandato, in particolare per anziani a rischio di caduta pi\u00F9 basso.",
+          "EFFETTO: riduzione del tasso di cadute dal 29% al 48% e del rischio dal 20% al 43%.",
+          "DOSAGGIO: 30-60 ore complessive producono il beneficio maggiore (riduzione del tasso del 42% e del rischio del 19%), superiore a meno di 30 ore (16% e 15%) e comparabile a oltre 60 ore (36% e 20%). Tre o pi\u00F9 sedute a settimana producono riduzioni maggiori di una o due. Gli interventi tipici durano 60 minuti, da 5 a 12 mesi.",
+          "\u26A0\uFE0F ALTO RISCHIO: negli anziani ad alto rischio la riduzione \u00E8 minore (10% del rischio, 17% del tasso) rispetto al basso rischio (38% e 22%). Per questo, nei soggetti ad alto rischio, l'esercizio multicomponente va preferito al Tai Chi da solo.",
+          "Nessun evento avverso grave riportato negli RCT inclusi.",
+          "\u2500\u2500\u2500 EDUCAZIONE \u2500\u2500\u2500",
+          "L'educazione DA SOLA non riduce n\u00E9 il tasso n\u00E9 il rischio di cadute.",
+          "RACCOMANDAZIONE (Qualit\u00E0 V, Opinione esperta): fornire educazione personalizzata COMBINATA con intervento di esercizio individualizzato, comprendendo azioni specifiche sui fattori di rischio identificati, pericoli domestici, deficit di forza ed equilibrio, e invio ad altri professionisti per i fattori fuori dall'ambito fisioterapico.",
+          "I materiali educativi devono considerare stile di apprendimento e livello di alfabetizzazione del paziente.",
+          "\u2500\u2500\u2500 VALUTAZIONE E MODIFICA AMBIENTALE (Qualit\u00E0 I, Forza FORTE) \u2500\u2500\u2500",
+          "Fortemente raccomandate per gli anziani a rischio pi\u00F9 elevato.",
+          "EFFETTO: riduzione del rischio dal 12% al 24% e del tasso del 19%.",
+          "\u26A0\uFE0F SELEZIONE DEL PAZIENTE: negli studi che non selezionavano per alto rischio non si osserva alcuna riduzione; in quelli che selezionavano per alto rischio si arriva al 48% di riduzione delle cadute e al 15% del rischio. In un'analisi la riduzione del rischio passa dal 21% al 39% considerando solo gli studi ad alto rischio.",
+          "DATO DECISIVO: i programmi multifattoriali che NON incorporavano valutazione e modifica ambientale non hanno mostrato alcun effetto su rischio o tasso di cadute; quelli che la includevano hanno ridotto il tasso del 35% e il rischio del 20%."
+        ]
+      }
+    ]
+  },
+  {
+    id: 23,
+    category: "Mano e Polso",
+    color: "#8A5A2B",
+    icon: "\u{1F590}\uFE0F",
+    title: "Sindrome del Tunnel Carpale \u2014 CPG Revisione 2026",
+    source: "Erickson et al. | JOSPT 2026;56(4):CPG1-CPG79 | APTA Orthopedics + APTA Hand and Upper Extremity",
+    pdfUrl: "https://www.jospt.org/doi/10.2519/jospt.2026.0301",
+    tags: ["mano", "polso", "tunnel carpale", "CTS", "nervo mediano", "ortesi", "CPG", "Phalen", "Tinel"],
+    summary: "Revisione 2026 della linea guida CPG sulla sindrome del tunnel carpale classica (compressione del nervo mediano al polso). Le raccomandazioni sugli interventi riguardano la gestione NON chirurgica e non sono generalizzabili al post-operatorio di release del tunnel carpale. Copre esame, misure di esito e interventi entro l'ambito della fisioterapia.",
+    sections: [
+      {
+        title: "Epidemiologia, Patogenesi e Decorso",
+        content: [
+          "PREVALENZA GLOBALE: circa il 14.4% della popolazione mondiale; 11.4% nei paesi a reddito basso-medio e 16.9% in quelli ad alto reddito, con valore pi\u00F9 alto in Europa. Nei diabetici varia dal 17.7% al 39.3%.",
+          "SESSO ED ET\u00C0: pi\u00F9 comune nelle donne, ma il divario dipende dall'et\u00E0. In Corea la prevalenza massima si osserva negli uomini nella quarta decade (29.2%) e nelle donne nella quinta (39.5%).",
+          "LAVORO: negli Stati Uniti l'incidenza confermata nei lavoratori \u00E8 diminuita del 77.2% dal 2003 al 2018, ma resta 5 volte superiore negli operai rispetto agli impiegati.",
+          "PATOGENESI: aumento della pressione nel tunnel carpale con ischemia del nervo ed edema intraneurale; la perfusione compromessa esita in fibrosi del nervo o delle strutture del tunnel. Quadro compatibile con una risposta infiammatoria cronica di basso grado.",
+          "L'ecografia B-mode mostra in modo inequivocabile un nervo mediano ingrossato all'ingresso del tunnel nei soggetti con CTS; non \u00E8 chiaro se l'ingrossamento sia dovuto a edema o a fibrosi.",
+          "MOBILIT\u00C0 DEL NERVO: due meta-analisi con ecografia dinamica concordano su una riduzione della mobilit\u00E0 longitudinale e trasversale del mediano rispetto alle strutture adiacenti.",
+          "DECORSO: intorpidimento, parestesie e/o dolore nel territorio del mediano. Sintomi iniziali tipici: parestesia notturna e caduta di oggetti. La compressione prolungata porta ad atrofia tenare e debolezza di presa e pinza.",
+          "\u26A0\uFE0F STADIO AVANZATO: con perdita del movimento attivo del pollice, questo assume una postura supinata nel piano dei metacarpi 2-5 e il paziente non riesce ad abdurre o opporre attivamente. A quel punto \u00E8 improbabile che il release chirurgico restituisca la funzione, e pu\u00F2 servire un trasferimento tendineo.",
+          "DOLORE: il 39.2% dei pazienti riferisce dolore superiore a 4/10. Su 108 soggetti, l'80% presentava dolore neuropatico. Predittori pi\u00F9 significativi dell'intensit\u00E0: latenza aumentata del potenziale d'azione motorio composto, dolore notturno e debolezza tenare.",
+          "FATTORI PSICOSOCIALI: circa il 30% delle persone con CTS presenta ansia e depressione. Non \u00E8 chiaro se precedano o seguano la CTS. L'attivit\u00E0 fisica elevata si associa a minore intensit\u00E0 di dolore (12.41 mm) e minori sintomi depressivi (3.29 punti).",
+          "FATTORI DI RISCHIO PRINCIPALI: obesit\u00E0 (pi\u00F9 rilevante nelle donne), et\u00E0, sesso femminile, sforzi manuali intensi (misurati con Borg CR-10, il fattore occupazionale pi\u00F9 forte), Strain Index elevato. NON risultano fattori di rischio l'uso del computer (evidenza moderata di nessun aumento) e la presa di pinza."
+        ]
+      },
+      {
+        title: "Esame \u2014 Raccomandazioni 2026",
+        content: [
+          "\u2500\u2500\u2500 DIAGRAMMI E QUESTIONARI \u2500\u2500\u2500",
+          "(B) I clinici DOVREBBERO usare il diagramma dei sintomi della mano di Katz e Stirrat per determinare sede e natura dei sintomi.",
+          "(C) I clinici POSSONO usare il diagramma di Katz e Stirrat o il questionario di Kamath e Stothard come strumento di screening iniziale per la CTS lavoro-correlata.",
+          "CLASSIFICAZIONE KATZ-STIRRAT: CTS classica = formicolio, intorpidimento o ridotta sensibilit\u00E0 con o senza dolore in almeno 2 delle dita 1, 2 o 3, esclusi sintomi in palmo e dorso; CTS probabile = come la classica ma con sintomi palmari ammessi salvo se confinati al lato ulnare; CTS possibile = sintomi in almeno 1 dito tra 1, 2 e 3; CTS improbabile = nessun sintomo nelle dita 1, 2 o 3.",
+          "\u2500\u2500\u2500 TEST PROVOCATIVI \u2500\u2500\u2500",
+          "(B) I clinici DOVREBBERO usare test di Phalen, segno di Tinel e test di compressione carpale (Durkan) per aiutare la diagnosi.",
+          "RAPPORTI DI VEROSIMIGLIANZA (revisione sistematica 2022, EDX come standard): Phalen +LR 4.39 / \u2212LR 0.32; Tinel +LR 3.61 / \u2212LR 0.48; Durkan +LR 6.86 / \u2212LR 0.25; ULNT1 +LR 1.46 / \u2212LR 0.68; hand elevation test +LR 15.93 / \u2212LR 0.10.",
+          "PHALEN CRONOMETRATO: positivit\u00E0 entro 10 secondi \u2014 specificit\u00E0 96.8% ma sensibilit\u00E0 bassa (13.9%).",
+          "\u26A0\uFE0F SCRATCH COLLAPSE TEST: le evidenze recenti indicano che NON \u00E8 un test diagnostico valido per la CTS. Sensibilit\u00E0 riportata del 7.7%, accordo tra osservatori da nullo a scarso.",
+          "\u26A0\uFE0F TEST NEURODINAMICI: specificit\u00E0, +LR e odds ratio diagnostici inferiori agli altri test provocativi. Non sono probabilmente diagnostici di una condizione specifica, ma di una accresciuta meccanosensibilit\u00E0 nervosa. Nessuna raccomandazione formulabile.",
+          "\u2500\u2500\u2500 TEST SENSITIVI E MOTORI \u2500\u2500\u2500",
+          "(A) I clinici DOVREBBERO usare i monofilamenti di Semmes-Weinstein per valutare la soglia sensitiva.",
+          "(B) I clinici DOVREBBERO usare la discriminazione statica a 2 punti per valutare la densit\u00E0 di innervazione sensitiva. Affidabilit\u00E0 intrarater ICC 0.83-0.99, interrater 0.79-0.99.",
+          "(C) I clinici POSSONO valutare forza di presa e pinza (tripode o polpastrello) e funzione della mano con Purdue Pegboard o Dellon-modified Moberg pick-up test, confrontando con le norme.",
+          "(F) I clinici POSSONO esaminare il gruppo muscolare tenare per l'atrofia. Sensibilit\u00E0 bassa (22%) ma specificit\u00E0 100% con EDX come riferimento: utile a confermare una CTS severa, ma non esistono dati su come quantificarla.",
+          "\u2500\u2500\u2500 TEST COMBINATI \u2500\u2500\u2500",
+          "(B) I clinici DOVREBBERO usare il CTS-6 per aiutare la diagnosi.",
+          "CTS-6: batteria che combina sede dei sintomi, presenza di sintomi notturni, debolezza del pollice o atrofia tenare, test di Phalen, segno di Tinel e discriminazione a 2 punti. Un punteggio totale di 12 si associa a una probabilit\u00E0 di CTS dell'80%. Affidabilit\u00E0 interrater sostanziale (Fleiss \u03BA 0.73).",
+          "Sensibilit\u00E0 89% e specificit\u00E0 92% con cut-off 12; salgono a 95% e 100% combinando il CTS-6 con l'ecografia point-of-care. Se l'ecografia non \u00E8 disponibile, il CTS-6 ha propriet\u00E0 sufficienti per essere usato da solo.",
+          "L'aggiunta di ulteriori test provocativi al CTS-6 NON aumenta l'accuratezza diagnostica."
+        ]
+      },
+      {
+        title: "Misure di Esito e Soglie di Cambiamento",
+        content: [
+          "(A) I clinici NON DEVONO usare la forza di pinza laterale come misura di esito per valutare il cambiamento, n\u00E9 in gestione conservativa n\u00E9 chirurgica.",
+          "(B) I clinici NON DEVONO usare la forza di presa per valutare il cambiamento a breve termine (meno di 3 mesi) nei pazienti operati.",
+          "(B) I clinici DOVREBBERO usare la BCTQ-SSS al basale e ad almeno un altro momento, inclusa la dimissione, per valutare il cambiamento dei sintomi, e DASH o QuickDASH per la funzione.",
+          "(C) I clinici POSSONO usare la BCTQ-FSS se DASH o QuickDASH non sono disponibili.",
+          "(C) Nei pazienti operati i clinici POSSONO usare PROMIS-PI, PROMIS-UE e Dellon-modified Moberg pick-up test.",
+          "\u26A0\uFE0F Un'analisi Rasch su 600 casi ha concluso che le due sottoscale della BCTQ NON vanno combinate in un punteggio totale, ma trattate separatamente.",
+          "\u26A0\uFE0F PROMIS-PF: n\u00E9 valida n\u00E9 responsiva per misurare il cambiamento dopo release del tunnel carpale.",
+          "\u2500\u2500\u2500 SOGLIE DI CAMBIAMENTO CLINICAMENTE RILEVANTE \u2014 GESTIONE CONSERVATIVA \u2500\u2500\u2500",
+          "BCTQ Symptom Severity Scale (1-5): MIC 0.44",
+          "BCTQ Functional Status Scale (1-5): MIC 0.36",
+          "Scala analogica visiva (0-100): MIC 14.31",
+          "Scala numerica del dolore (0-10): MCID 1.5 (gestione sia chirurgica sia conservativa)",
+          "QuickDASH (0-100): MCID 10.4 in gestione chirurgica (follow-up medio 14 giorni post-op)",
+          "DASH (0-100): MCID 18.2 in gestione chirurgica (follow-up medio 3 mesi); miglioramento clinicamente significativo 20.9 a 6 settimane",
+          "NOTA: i valori di cambiamento clinicamente rilevante risultano leggermente pi\u00F9 alti nei pazienti operati rispetto a quelli in gestione conservativa."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Ortesi ed Educazione",
+        content: [
+          "\u2500\u2500\u2500 ORTESI (raccomandazione principale) \u2500\u2500\u2500",
+          "(B) I clinici DOVREBBERO raccomandare un'ortesi di immobilizzazione del polso a base avambraccio, verificando che mantenga il polso vicino alla posizione neutra sul piano sagittale, indossata di notte, per miglioramento a breve e/o medio termine di sintomi e funzione nella CTS lieve-moderata in gestione conservativa o in attesa di intervento.",
+          "(C) I clinici POSSONO adattare il tempo di utilizzo includendo uso diurno, sintomatico o continuativo quando il solo uso notturno non controlla i sintomi. POSSONO inoltre aggiungere l'immobilizzazione delle metacarpo-falangee o modificare la posizione del polso nei pazienti che non ottengono sollievo.",
+          "(C) I clinici POSSONO raccomandare un'ortesi per le donne con CTS in gravidanza e fornire una rivalutazione post-partum per verificare la risoluzione dei sintomi.",
+          "(C) I clinici POSSONO raccomandare l'uso dell'ortesi nei pazienti sottoposti a infiltrazione steroidea.",
+          "RAZIONALE: l'ortesi mantiene teoricamente il polso nella posizione di massimo volume del tunnel e minima pressione interna. L'immobilizzazione limita lo scorrimento di tendini e nervo, riducendo l'attrito e quindi edema e mediatori infiammatori.",
+          "DURATA: sintomi e funzione migliorano di pi\u00F9 quando l'ortesi \u00E8 indossata per un periodo pi\u00F9 lungo (6 mesi contro 6 settimane). Nessun danno riportato con l'uso dell'ortesi.",
+          "\u26A0\uFE0F VERIFICA: posizione e vestibilit\u00E0 dell'ortesi vanno controllate per assicurare l'immobilizzazione completa, confermare il posizionamento a 0\u00B0 e prevenire pressione eccessiva da cinghie troppo strette.",
+          "\u2500\u2500\u2500 EDUCAZIONE ERGONOMICA \u2500\u2500\u2500",
+          "(C) I clinici POSSONO educare i pazienti sugli effetti dell'uso del mouse sulla pressione nel tunnel carpale e aiutarli a sviluppare strategie alternative: uso dei tasti freccia, touch screen, alternanza della mano sul mouse. POSSONO raccomandare tastiere a bassa forza di battuta a chi riferisce dolore digitando.",
+          "(F) I clinici POSSONO fornire informazioni su patologia e fattori di rischio, identificare attivit\u00E0 e posizioni di polso e mano potenzialmente contribuenti, e collaborare con il paziente per ridurre le esposizioni."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Terapia Manuale, Esercizio, Taping",
+        content: [
+          "\u2500\u2500\u2500 TERAPIA MANUALE \u2500\u2500\u2500",
+          "(C) I clinici POSSONO eseguire terapia manuale diretta al rachide cervicale e all'arto superiore nelle aree di intrappolamento del nervo mediano, per miglioramento a breve termine di dolore e funzione nella CTS lieve-moderata in gestione conservativa.",
+          "(C) I clinici POSSONO eseguire massaggio strumentale dei tessuti molli con fibrolisi diacutanea per miglioramento a breve termine di sintomi e funzione.",
+          "FIBROLISI DIACUTANEA: tecnica derivata dai principi del massaggio trasverso profondo di Cyriax, che impiega un uncino metallico per un rilascio pi\u00F9 profondo e preciso delle aderenze. Risultati positivi su VAS notturna e DASH, ma da confermare al di fuori del gruppo di autori originale.",
+          "\u26A0\uFE0F STRETCHING MIOFASCIALE DEL LEGAMENTO CARPALE: non superiore al placebo.",
+          "\u26A0\uFE0F MOBILIZZAZIONE NEURALE: evidenze conflittuali, nessuna raccomandazione formulabile. Una revisione sistematica conclude che non pu\u00F2 essere raccomandata nella CTS lieve-moderata; in uno studio primario l'aggiunta di tendon e nerve gliding all'ortesi \u00E8 risultata equivalente alla sola ortesi a 6 settimane.",
+          "\u26A0\uFE0F ATTENZIONE AI GLIDING: studi precedenti hanno mostrato che i movimenti delle dita nei tendon e nerve gliding modificano l'area di sezione e il rapporto di appiattimento del mediano, in modo pi\u00F9 marcato nei soggetti con CTS, specie nelle posizioni hook e fist \u2014 questi esercizi potrebbero quindi incidere negativamente sul nervo per compressione o strain.",
+          "\u26A0\uFE0F DRENAGGIO LINFATICO MANUALE: evidenze conflittuali, nessuna raccomandazione formulabile. Non superiore ai nerve glides o all'ortesi.",
+          "\u2500\u2500\u2500 ESERCIZIO TERAPEUTICO \u2500\u2500\u2500",
+          "(C) I clinici POSSONO usare un programma combinato di ortesi e stretching nei pazienti con CTS lieve-moderata in gestione conservativa che NON presentano atrofia tenare e hanno discriminazione a 2 punti normale.",
+          "Nessuna nuova evidenza sull'esercizio terapeutico \u00E8 emersa in questa revisione.",
+          "\u2500\u2500\u2500 TAPING \u2500\u2500\u2500",
+          "(C) I clinici POSSONO usare il kinesiology taping per miglioramento a breve e medio termine dei sintomi nella CTS lieve in gestione conservativa.",
+          "Il taping rigido NON \u00E8 incluso nelle raccomandazioni per bassa certezza dell'evidenza e rischio di bias. Il meccanismo di efficacia resta poco chiaro: potrebbe consistere nella riduzione dell'uso funzionale della mano tramite input propriocettivo o restrizione del movimento.",
+          "Il taping pu\u00F2 rappresentare un'alternativa per chi non tollera o non aderisce all'uso costante dell'ortesi."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Agenti Fisici",
+        content: [
+          "\u2500\u2500\u2500 DA NON USARE \u2500\u2500\u2500",
+          "(A) I clinici NON DEVONO usare ionoforesi o fonoforesi con corticosteroidi per la gestione conservativa della CTS.",
+          "(B) I clinici NON DEVONO usare n\u00E9 raccomandare l'uso di magneti.",
+          "\u2500\u2500\u2500 OPZIONI POSSIBILI (grado C) \u2500\u2500\u2500",
+          "LASER: i clinici POSSONO usare laser a bassa intensit\u00E0 (LLLT, classe III \u2264500 mW) o ad alta intensit\u00E0 (HILT, classe IV >500 mW) per miglioramento a breve termine di dolore e funzione nella CTS lieve-moderata. \u26A0\uFE0F I dosaggi ottimali non sono stati stabiliti.",
+          "ONDE D'URTO (ESWT): i clinici POSSONO usarle per miglioramento a breve e medio termine (<6 mesi) di sintomi e funzione nella CTS lieve o moderata, e considerare la ESWT radiale rispetto a quella focalizzata. La rESWT pu\u00F2 essere usata da fisioterapisti; la focalizzata negli Stati Uniti \u00E8 riservata ai medici.",
+          "CORRENTE INTERFERENZIALE: i clinici POSSONO usarla per miglioramento a breve termine del dolore nella CTS lieve-moderata.",
+          "CALORE SUPERFICIALE: i clinici POSSONO raccomandarlo per miglioramento a breve termine dei sintomi.",
+          "DIATERMIA A MICROONDE O ONDE CORTE: i clinici POSSONO raccomandarla per miglioramento a breve termine dei sintomi nella CTS lieve-moderata.",
+          "\u26A0\uFE0F I pazienti con CTS vanno istruiti sui rischi di applicare agenti termici su tessuto con deficit sensitivo e invitati a controllare frequentemente la cute. Il calore non va usato in presenza di infiammazione.",
+          "\u2500\u2500\u2500 NESSUNA RACCOMANDAZIONE FORMULABILE \u2500\u2500\u2500",
+          "ULTRASUONI: evidenze conflittuali sia per la forma termica sia per quella non termica. Nessuna raccomandazione.",
+          "DRY NEEDLING: un solo studio di livello II mostra miglioramento a 1 settimana aggiungendo una singola seduta sui trigger point dell'avambraccio all'ortesi notturna, ma nessun beneficio aggiuntivo a 6 settimane. Evidenza insufficiente, nessuna raccomandazione.",
+          "TECAR: evidenza limitata a 2 piccoli studi multi-intervento, nessuna conclusione possibile. In un confronto diretto la TECAR \u00E8 risultata meno efficace degli ultrasuoni non termici sul dolore a breve termine."
+        ]
+      },
+      {
+        title: "Albero Decisionale e Conclusione sugli Interventi",
+        content: [
+          "\u2500\u2500\u2500 CTS LIEVE-MODERATA \u2014 criteri \u2500\u2500\u2500",
+          "Monofilamento <3.22 (A) | BCTQ-SSS <2.5 (B) | assenza di atrofia tenare (F) | durata dei sintomi <1 anno (F) | sintomi intermittenti (F)",
+          "\u2500\u2500\u2500 CTS SEVERA \u2014 criteri \u2500\u2500\u2500",
+          "BCTQ-SSS \u22652.5 (B) | atrofia tenare (F) | durata dei sintomi >1 anno (F) | sintomi costanti (F) | monofilamento \u22653.61 (F)",
+          "\u2192 la CTS severa va inviata direttamente a consulto chirurgico.",
+          "\u2500\u2500\u2500 PRIMO LIVELLO PER LIEVE-MODERATA \u2500\u2500\u2500",
+          "ORTESI (B): avviare un'ortesi di immobilizzazione del polso a base avambraccio, indossata di notte. Valutare vestibilit\u00E0, angolo di immobilizzazione e corretta applicazione.",
+          "EDUCAZIONE (F): fornire informazioni su patologia, fattori di rischio, posture e attivit\u00E0 aggravanti; collaborare con il paziente per ridurre le esposizioni.",
+          "\u2500\u2500\u2500 SECONDO LIVELLO \u2500\u2500\u2500",
+          "ORTESI (B): follow-up per verificare vestibilit\u00E0, aderenza ed efficacia; considerare modifica della posizione o del tempo di utilizzo.",
+          "TAPING (C): alternativa per chi non tollera o non aderisce all'uso costante dell'ortesi.",
+          "Se sono presenti altre condizioni muscoloscheletriche o alterazioni di movimento e postura: fibrosi o restrizioni dei tessuti molli lungo il decorso del mediano \u2192 mobilizzazione dei tessuti molli (C); alterazioni originanti dal rachide cervicale o dolore miofasciale con trigger point \u2192 interventi mirati agli specifici deficit (C); dolore limitante \u2192 agenti fisici (C).",
+          "\u2500\u2500\u2500 RIVALUTAZIONE \u2500\u2500\u2500",
+          "MIGLIORAMENTO (dimissione all'autogestione): riduzione BCTQ-SSS \u22650.44 | QuickDASH \u226510.4 | DASH \u226520.9 | VAS \u226514.31 | NPRS \u22651.5",
+          "NESSUN CAMBIAMENTO o peggioramento rispetto al basale su BCTQ-SSS, Q/DASH, VAS, NPRS \u2192 invio a consulto chirurgico.",
+          "\u2500\u2500\u2500 CONCLUSIONE DEGLI AUTORI \u2500\u2500\u2500",
+          "La fisioterapia \u00E8 indicata come gestione iniziale per CTS confermata o sospetta di severit\u00E0 lieve-moderata. Il gruppo raccomanda educazione del paziente con modifica delle attivit\u00E0 aggravanti e dei fattori di rischio modificabili, in aggiunta a un'ortesi ben adattata e correttamente applicata che mantenga il polso a 0\u00B0 sul piano sagittale, indossata di notte, come intervento fisioterapico iniziale.",
+          "In assenza di sollievo pu\u00F2 servire estendere l'uso dell'ortesi al giorno o modificarne la posizione di immobilizzazione. L'intervento va esteso anche a situazioni particolari come la gravidanza o i pazienti con segni di CTS severa in cui la chirurgia sia stata rifiutata o sia controindicata.",
+          "\u26A0\uFE0F Nessun intervento aggiuntivo \u2014 agenti fisici, terapia manuale, stretching o taping \u2014 emerge come superiore agli altri per il sollievo a breve termine. La scelta va guidata da decisione condivisa con il paziente e disponibilit\u00E0 di risorse.",
+          "Chi non raggiunge una differenza clinicamente importante su misure valide come la BCTQ-SSS deve essere inviato a valutazione chirurgica.",
+          "\u2500\u2500\u2500 LEGENDA GRADI \u2500\u2500\u2500",
+          "A = evidenza forte (prevalenza di studi di livello I e/o II con almeno uno di livello I) \u2014 obbligo: deve o dovrebbe",
+          "B = evidenza moderata (un singolo RCT di alta qualit\u00E0 o prevalenza di studi di livello II) \u2014 obbligo: dovrebbe",
+          "C = evidenza debole (un singolo studio di livello II o prevalenza di livelli III e IV, incluso consenso di esperti) \u2014 obbligo: pu\u00F2",
+          "D = evidenza conflittuale \u2014 E = evidenza teorica/fondazionale \u2014 F = opinione degli esperti"
+        ]
+      }
+    ]
+  },
+  {
+    id: 24,
+    category: "Traumatologia",
+    color: "#7A6010",
+    icon: "\u{1F525}",
+    title: "Sindrome Dolorosa Regionale Complessa (CRPS) \u2014 Linee Guida 5\u00AA Edizione",
+    source: "Harden et al. | Pain Med 2022;23(Suppl 1):S1-S53 | Reflex Sympathetic Dystrophy Syndrome Association",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC9186375/",
+    tags: ["CRPS", "dolore", "distrofia simpatico riflessa", "Budapest", "riabilitazione", "mirror therapy", "graded motor imagery"],
+    summary: "Quinta edizione delle linee guida diagnostiche e terapeutiche per la Sindrome Dolorosa Regionale Complessa (CRPS), gi\u00E0 nota come distrofia simpatico riflessa e causalgia. Include i criteri di Budapest adottati dalla IASP nel 2012, il modello di functional restoration interdisciplinare e il ruolo di fisioterapia e terapia occupazionale.",
+    sections: [
+      {
+        title: "Criteri Diagnostici di Budapest (IASP 2012)",
+        content: [
+          "DEFINIZIONE: la CRPS \u00E8 una sindrome caratterizzata da dolore regionale continuo (spontaneo e/o evocato) apparentemente sproporzionato nel tempo o nel grado rispetto al decorso abituale di qualsiasi trauma o lesione nota. Il dolore \u00E8 regionale, non limitato a un territorio nervoso o a un dermatomero, e ha di solito predominanza distale di alterazioni sensitive, motorie, sudomotorie, vasomotorie e/o trofiche. La sindrome mostra progressione variabile nel tempo.",
+          "\u2500\u2500\u2500 CRITERIO 1 \u2500\u2500\u2500",
+          "Dolore continuo, sproporzionato rispetto a qualsiasi evento scatenante.",
+          "\u2500\u2500\u2500 CRITERIO 2 \u2014 SINTOMI RIFERITI \u2500\u2500\u2500",
+          "Deve riferire almeno un sintomo in 3 delle 4 categorie seguenti:",
+          "\u2022 Iperalgesia e/o allodinia",
+          "\u2022 Asimmetria termica e/o alterazioni del colore cutaneo e/o asimmetria del colore",
+          "\u2022 Edema e/o alterazioni della sudorazione e/o asimmetria della sudorazione",
+          "\u2022 Riduzione del ROM e/o disfunzione motoria (debolezza, tremore, distonia) e/o alterazioni trofiche (peli, unghie, cute)",
+          "\u2500\u2500\u2500 CRITERIO 3 \u2014 SEGNI OSSERVATI \u2500\u2500\u2500",
+          "Deve presentare almeno un segno al momento della valutazione in 2 o pi\u00F9 delle categorie seguenti:",
+          "\u2022 Evidenza di iperalgesia (alla puntura) e/o allodinia (al tocco leggero e/o pressione somatica profonda e/o movimento articolare)",
+          "\u2022 Evidenza di asimmetria termica e/o alterazioni o asimmetria del colore cutaneo",
+          "\u2022 Evidenza di edema e/o alterazioni o asimmetria della sudorazione",
+          "\u2022 Evidenza di riduzione del ROM e/o disfunzione motoria e/o alterazioni trofiche",
+          "\u2500\u2500\u2500 CRITERIO 4 \u2500\u2500\u2500",
+          "Non esiste altra diagnosi che spieghi meglio segni e sintomi.",
+          "\u26A0\uFE0F Un segno viene conteggiato solo se \u00E8 osservato al momento della diagnosi.",
+          "STORIA: il termine CRPS nasce dalla conferenza internazionale di Orlando del 1994; i criteri IASP del 1994 sono stati poi validati empiricamente dando origine ai criteri di Budapest, adottati formalmente dalla IASP nel 2012."
+        ]
+      },
+      {
+        title: "Functional Restoration \u2014 Impianto del Trattamento",
+        content: [
+          "RAZIONALE: la CRPS \u00E8 biomedicamente multiforme, con fisiopatologia centrale e periferica, e contiene frequentemente componenti psicosociali che sono a loro volta caratteristiche diagnostiche e bersagli terapeutici.",
+          "APPROCCIO INTERDISCIPLINARE: gruppo dedicato, coerente, coordinato e specificamente formato di professionisti che si riuniscono regolarmente per pianificare, coordinare la cura e adattarsi agli sviluppi. Meno desiderabile ma pi\u00F9 accessibile \u00E8 l'approccio multidisciplinare, in cui un singolo professionista coordina le varie specialit\u00E0.",
+          "\u2500\u2500\u2500 EVOLUZIONE DELLE LINEE GUIDA \u2500\u2500\u2500",
+          "MALIBU 1987: principi centrali di motivazione del paziente, desensibilizzazione e riattivazione facilitata dal sollievo dal dolore, uso di procedure farmacologiche e interventistiche, tecniche cognitivo-comportamentali.",
+          "\u26A0\uFE0F PROBLEMI DELLE LINEE MALIBU: nessuna raccomandazione su sequenza o durata degli interventi; concetto di time-contingency troppo rigido (progressione di ogni livello in 2 settimane o meno); farmaci, blocchi e psicoterapia riservati solo ai casi in cui l'algoritmo funzionale non abbia dato risultati.",
+          "MINNEAPOLIS 2001: raccomanda percorsi CONCORRENTI anzich\u00E9 lineari, costruiti sui domini di riabilitazione, gestione del dolore e trattamento psicologico. Liberalizza l'uso delle modalit\u00E0 analgesiche, riduce l'enfasi sulla time-contingency e mantiene il focus sulla funzione.",
+          "PRINCIPIO OPERATIVO: nell'esperienza degli autori, pi\u00F9 spesso che no sono necessari interventi multipli per avviare adeguatamente il paziente in un processo di functional restoration \u2014 non ha senso 'riservarli' finch\u00E9 il paziente non ha fallito."
+        ]
+      },
+      {
+        title: "Fisioterapia",
+        content: [
+          "La fisioterapia \u00E8 stata definita dal gruppo di gestione del dolore della Mayo Clinic 'la pietra angolare e il trattamento di prima linea per la CRPS'.",
+          "OBIETTIVI: aumentare ROM, flessibilit\u00E0 e successivamente forza attraverso esercizio progressivo gentile; migliorare tutti i compiti funzionali, incluso il gait training nella CRPS dell'arto inferiore; coordinare gli obiettivi con terapia occupazionale, ricreativa e riabilitazione professionale.",
+          "\u26A0\uFE0F LIMITE FONDAMENTALE: la fisioterapia deve essere eseguita entro i limiti della tolleranza del paziente e MAI quando l'arto affetto \u00E8 insensibile (ad esempio subito dopo un blocco) o nei pazienti con CRPS di tipo II che presentano ipoestesia pronunciata.",
+          "\u26A0\uFE0F Una fisioterapia inappropriatamente aggressiva pu\u00F2 scatenare dolore estremo, edema, distress e affaticamento, e pu\u00F2 a sua volta esacerbare i sintomi infiammatori e simpatici della CRPS: va quindi evitata.",
+          "\u26A0\uFE0F Anche l'uso di ausili o dispositivi per il ROM, l'applicazione prolungata di ghiaccio e l'inattivit\u00E0 possono aggravare la CRPS.",
+          "PRINCIPIO CHIAVE DA INSEGNARE AL PAZIENTE: si prova dolore sia esercitandosi troppo sia esercitandosi troppo poco. Il paziente va educato a cercare la 'via di mezzo', ed \u00E8 responsabilit\u00E0 del fisioterapista aiutarlo a trovare quel terreno terapeutico e ad avanzare stabilmente verso uno stile di vita pi\u00F9 funzionale e attivo.",
+          "EVIDENZA: in una serie di RCT il gruppo di Oerlemans ha mostrato che la fisioterapia (e in misura minore la terapia occupazionale) migliora i punteggi di dolore e la 'mobilit\u00E0 attiva' rispetto ai pazienti che ricevevano solo counseling, in coorti con CRPS dell'arto superiore (livello 2).",
+          "PROTOCOLLO DI OERLEMANS: obiettivo principale \u00E8 consentire al paziente il maggior grado possibile di controllo sui propri sintomi, perseguendo senza sosta la rianimazione della parte affetta. Comprende supporto, terapia con esercizio, miglioramento delle abilit\u00E0 e terapia di rilassamento. Componenti chiave: aumentare il grado di controllo sul dolore, migliorare il coping, trattare la disregolazione e migliorare le abilit\u00E0, anche attraverso l'addestramento a competenze compensatorie."
+        ]
+      },
+      {
+        title: "Terapia Occupazionale, Mirror Therapy e Graded Motor Imagery",
+        content: [
+          "I terapisti occupazionali sono i leader terapeutici ideali nel processo di functional restoration, essendo formati sui principi bio-psico-sociali della malattia e centrali nella valutazione e nel trattamento funzionale.",
+          "VALUTAZIONE: uso funzionale attuale dell'arto affetto; ROM attivo con goniometro; edema con misurazione circonferenziale o volumetro; coordinazione e destrezza; temperatura cutanea e alterazioni vasomotorie; dolore e sensibilit\u00E0; uso dell'arto nelle attivit\u00E0 quotidiane.",
+          "\u2500\u2500\u2500 MIRROR VISUAL FEEDBACK (MVF) \u2500\u2500\u2500",
+          "Ramachandran ha per primo descritto l'uso degli specchi per ridurre dolore o disagio posizionale nel dolore da arto fantasma (livello 3). McCabe ha poi esteso lo studio della MVF alla CRPS (livello 3), illustrandone i benefici nelle forme precoci e intermedie.",
+          "\u26A0\uFE0F La MVF NON ha dimostrato effetto significativo nella CRPS cronica.",
+          "PROTOCOLLO McCABE: si chiede al paziente di chiudere gli occhi e descrivere entrambi gli arti (dimensione, posizione, differenze percepite), seguito da movimenti immaginati di entrambi. I movimenti si concentrano sulle articolazioni dolorose e su quelle immediatamente prossimali e distali. Il partecipante osserva poi l'arto riflesso senza movimento, per cercare di raggiungere il senso di appartenenza.",
+          "\u2500\u2500\u2500 GRADED MOTOR IMAGERY (GMI) \u2500\u2500\u2500",
+          "Moseley ha progettato il programma GMI per attivare in sequenza la corteccia premotoria e la corteccia motoria primaria attraverso tre fasi: riconoscimento della lateralit\u00E0 dell'arto, immaginazione motoria e infine terapia allo specchio.",
+          "Il programma \u00E8 apparso particolarmente utile perch\u00E9 la corteccia premotoria pu\u00F2 essere attivata senza innescare altre reti corticali coinvolte nel movimento. \u00C8 stato sviluppato specificamente per chi ha CRPS di lunga durata.",
+          "MECCANISMI IPOTIZZATI: attenzione forzata verso l'arto affetto, riduzione della chinesiofobia, aumento dell'inibizione a fibre larghe e riconciliazione dell'incongruenza sensomotoria.",
+          "\u26A0\uFE0F I protocolli di McCabe per la MVF e di Moseley per la GMI vanno considerati parametri di trattamento indicativi: entrambi enfatizzano l'importanza di un approccio centrato sul paziente, guidato dall'osservazione clinica dei sintomi presenti e dalla risposta al trattamento."
+        ]
+      }
+    ]
+  },
+  {
+    id: 25,
+    category: "Ginocchio",
+    color: "#0E6B5E",
+    icon: "\u{1F9B5}",
+    title: "Artrosi di Ginocchio (Non Protesica) \u2014 CPG AAOS 2021",
+    source: "AAOS | Management of Osteoarthritis of the Knee (Non-Arthroplasty), 3\u00AA edizione | Adottata 31 agosto 2021",
+    pdfUrl: "https://www.aaos.org/globalassets/quality-and-practice-resources/osteoarthritis-of-the-knee/oak3cpg.pdf",
+    pdfUrl2: "https://www.aaos.org/oak3cpg",
+    tags: ["ginocchio", "artrosi", "gonartrosi", "OA", "esercizio", "AAOS", "conservativo", "infiltrazioni", "CPG"],
+    summary: "Linea guida AAOS 2021 sul trattamento non protesico dell'artrosi di ginocchio negli adulti dai 17 anni. Sostituisce la seconda edizione del 2013 e adotta il framework GRADE Evidence-to-Decision. Copre interventi non farmacologici, farmacologici e procedure chirurgiche meno invasive della protesi. Non riguarda artrite reumatoide, artrosi di altre articolazioni o artropatie infiammatorie.",
+    sections: [
+      {
+        title: "Epidemiologia e Impianto",
+        content: [
+          "INCIDENZA: negli Stati Uniti stimata in 240 persone per 100.000 all'anno.",
+          "PREVALENZA MONDIALE dell'artrosi di ginocchio sintomatica confermata radiograficamente: circa 3.8% complessivo, in aumento con l'et\u00E0 fino a oltre il 10% sopra i 60 anni.",
+          "Circa 32.5 milioni di adulti americani, il 14% della popolazione, hanno sofferto di artrosi di ginocchio sintomatica tra il 2008 e il 2014.",
+          "SESSO: le donne rappresentano il 51% della popolazione generale statunitense ma il 78% dei pazienti con diagnosi di artrosi tra il 2008 e il 2014.",
+          "EZIOLOGIA: l'artrosi deriva da uno squilibrio tra degradazione e riparazione dei tessuti dell'articolazione sinoviale e si manifesta per pi\u00F9 fattori di rischio, tra cui trauma, sovraccarico e predisposizione genetica.",
+          "METODO: ricerca sistematica condotta tra marzo 2018 e aprile 2020; 15.103 abstract esaminati nella ricerca primaria pi\u00F9 1.768 nella secondaria; 617 articoli inclusi dopo revisione full-text e analisi di qualit\u00E0.",
+          "VOTAZIONE: le raccomandazioni venivano approvate con maggioranza semplice del 60%, ma il gruppo ha raggiunto il consenso del 100% su ogni raccomandazione di questa linea guida.",
+          "\u2500\u2500\u2500 LEGENDA FORZA DELLE RACCOMANDAZIONI \u2500\u2500\u2500",
+          "FORTE: evidenza da due o pi\u00F9 studi di qualit\u00E0 alta con risultati coerenti, senza motivi di declassamento \u2014 improbabile che ricerche future la ribaltino",
+          "MODERATA: evidenza da due o pi\u00F9 studi di qualit\u00E0 moderata con risultati coerenti, oppure da un singolo studio di alta qualit\u00E0",
+          "LIMITATA: evidenza da uno o pi\u00F9 studi di bassa qualit\u00E0 con risultati coerenti, o da un singolo studio moderato; oppure evidenza superiore declassata per criticit\u00E0 nel framework EtD",
+          "CONSENSO: nessuna evidenza a supporto; raccomandazione basata sull'opinione clinica del gruppo"
+        ]
+      },
+      {
+        title: "Raccomandazioni FORTI",
+        content: [
+          "\u2500\u2500\u2500 A FAVORE \u2500\u2500\u2500",
+          "ESERCIZIO (FORTE): esercizio supervisionato, non supervisionato e/o in acqua sono raccomandati rispetto a nessun esercizio, per migliorare dolore e funzione.",
+          "\u2192 In 7 studi di alta qualit\u00E0 su 10 si sono osservati maggiori miglioramenti di dolore, funzione o entrambi rispetto al controllo senza esercizio. Il confronto tra esercizio supervisionato e non supervisionato ha dato risultati misti: entrambi migliorano dolore e funzione.",
+          "\u2192 MODALIT\u00C0: gli studi che hanno confrontato yoga, carico contro non carico, resistenza alta contro bassa, isocinetico/isometrico/isotonico e lavoro su gamba contro anca non hanno trovato differenze sostanziali. L'esercizio \u00E8 benefico, ma la modalit\u00E0 conta meno del fatto di praticarne uno.",
+          "\u2192 L'esercizio in acqua mostra benefici, ma i risultati incoerenti non permettono di raccomandarlo rispetto a quello a terra.",
+          "AUTOGESTIONE (FORTE): i programmi di self-management sono raccomandati per migliorare dolore e funzione. Comprendono aderenza terapeutica, gestione del dolore e strategie di coping, protezione articolare durante l'attivit\u00E0, consigli sull'esercizio, problem solving e gestione dello stress.",
+          "EDUCAZIONE DEL PAZIENTE (FORTE): i programmi educativi sono raccomandati per migliorare il dolore.",
+          "FANS TOPICI (FORTE): dovrebbero essere usati per migliorare funzione e qualit\u00E0 di vita, quando non controindicati. \u26A0\uFE0F Cautela in insufficienza renale cronica stadio 4-5, coronaropatia e scompenso cardiaco.",
+          "FANS ORALI (FORTE): raccomandati per migliorare dolore e funzione, quando non controindicati.",
+          "PARACETAMOLO ORALE (FORTE): raccomandato per migliorare dolore e funzione, quando non controindicato.",
+          "\u2500\u2500\u2500 CONTRO \u2500\u2500\u2500",
+          "\u26A0\uFE0F PLANTARI CON CUNEO LATERALE (FORTE): NON raccomandati. Gli studi contemporanei non mostrano un miglioramento affidabile del dolore n\u00E9 un miglioramento funzionale sufficiente. In uno studio il 25% dei soggetti non correggeva il momento adduttorio del ginocchio con il cuneo.",
+          "\u26A0\uFE0F OPPIOIDI ORALI, TRAMADOLO INCLUSO (FORTE): determinano un aumento significativo di eventi avversi e NON sono efficaci nel migliorare dolore o funzione."
+        ]
+      },
+      {
+        title: "Raccomandazioni MODERATE",
+        content: [
+          "BASTONE (MODERATA): pu\u00F2 essere usato per migliorare dolore e funzione. In uno studio su 64 pazienti, a 30 e 60 giorni il gruppo con bastone aveva meno dolore (VAS 3.84 contro 5.95 cm a 60 giorni) e consumava meno FANS.",
+          "\u2192 Inizialmente tutti i pazienti mostrano distanza di deambulazione ridotta, frequenza cardiaca e consumo di ossigeno aumentati; dopo 60 giorni riescono a percorrere la stessa distanza con o senza bastone, con consumo di ossigeno pi\u00F9 normale \u2014 segno di adattamento fisiologico.",
+          "TUTORE (MODERATA, declassata per eterogeneit\u00E0): il trattamento con tutore pu\u00F2 essere usato per migliorare funzione, dolore e qualit\u00E0 di vita. L'analisi per sottogruppi mostra effetto maggiore nei pazienti con allineamento in varo e sintomi pi\u00F9 severi. Praticamente nessun danno nel provarlo, salvo irritazione cutanea o scomodit\u00E0.",
+          "TRAINING NEUROMUSCOLARE (MODERATA, declassata per incoerenza): i programmi neuromuscolari (equilibrio, agilit\u00E0, coordinazione) in combinazione con l'esercizio tradizionale possono essere usati per migliorare la funzione performance-based e la velocit\u00E0 del cammino.",
+          "\u26A0\uFE0F In nessuno degli studi si sono osservate differenze di dolore tra i gruppi.",
+          "CALO PONDERALE (MODERATA, declassata per incoerenza): la perdita di peso sostenuta \u00E8 raccomandata per migliorare dolore e funzione nei pazienti sovrappeso e obesi. Dolore e funzione migliorano complessivamente con il calo ottenuto combinando dieta ed esercizio; la sola dieta contro controllo non ha mostrato cambiamenti clinicamente significativi chiari. La combinazione dieta ed esercizio appare l'alternativa preferibile.",
+          "CORTICOSTEROIDI INTRARTICOLARI (MODERATA): possono fornire sollievo a BREVE termine.",
+          "\u26A0\uFE0F ACIDO IALURONICO (MODERATA): NON raccomandato per l'uso di routine nel trattamento dell'artrosi sintomatica di ginocchio.",
+          "\u26A0\uFE0F LAVAGGIO E DEBRIDEMENT ARTROSCOPICI (MODERATA): NON raccomandati nei pazienti con diagnosi primaria di artrosi di ginocchio.",
+          "MENISCECTOMIA PARZIALE ARTROSCOPICA (MODERATA): pu\u00F2 essere usata per il trattamento delle lesioni meniscali in pazienti con artrosi concomitante lieve-moderata che hanno fallito la fisioterapia o altri trattamenti non chirurgici."
+        ]
+      },
+      {
+        title: "Raccomandazioni LIMITATE e di Consenso",
+        content: [
+          "TERAPIA MANUALE (LIMITATA, declassata): la terapia manuale in aggiunta a un programma di esercizio pu\u00F2 essere usata per migliorare dolore e funzione.",
+          "\u2192 In due studi il gruppo con terapia manuale ha ottenuto miglioramenti maggiori a 8-9 settimane (punteggio WOMAC totale, criteri OMERACT-OARSI Responder), ma a 1 anno NON si osservavano differenze tra i gruppi su nessuna misura. Entrambi i gruppi mantenevano comunque i miglioramenti a un anno.",
+          "\u2192 COSTI: la terapia manuale con esercizio erogata con sedute booster periodiche \u00E8 risultata pi\u00F9 costo-efficace della stessa combinazione senza booster, su follow-up a 2 anni.",
+          "MASSAGGIO (LIMITATA, declassata): pu\u00F2 essere usato in aggiunta alla cura abituale per migliorare dolore e funzione. \u26A0\uFE0F Gli effetti non si sono mantenuti nei follow-up a pi\u00F9 lungo termine.",
+          "LASER APPROVATO FDA (LIMITATA, declassata per fattibilit\u00E0 e uso nella pratica): pu\u00F2 essere usato per migliorare dolore e funzione. Nessuna differenza tra alta e bassa dose.",
+          "AGOPUNTURA (LIMITATA, declassata): pu\u00F2 migliorare dolore e funzione. \u26A0\uFE0F Nei due studi con cecit\u00E0 efficace non si osservava alcun effetto; gli effetti maggiori si registravano negli studi senza cecit\u00E0 o con cecit\u00E0 poco chiara \u2014 ed \u00E8 questa la ragione del grado limitato.",
+          "TENS (LIMITATA, declassata): pu\u00F2 essere usata per migliorare il DOLORE. \u26A0\uFE0F I risultati NON supportano l'uso della TENS per migliorare la funzione.",
+          "PENS E CAMPI ELETTROMAGNETICI PULSATI (LIMITATA, declassata per fattibilit\u00E0): la PENS pu\u00F2 migliorare dolore e funzione; la PEMF il dolore.",
+          "ONDE D'URTO (LIMITATA, declassata): possono essere usate per migliorare dolore e funzione. Miglioramenti funzionali a 4-12 settimane ma non a 1 anno.",
+          "PRP (LIMITATA, declassata): il plasma ricco di piastrine pu\u00F2 ridurre il dolore e migliorare la funzione.",
+          "DENERVAZIONE (LIMITATA, declassata): pu\u00F2 ridurre il dolore e migliorare la funzione.",
+          "OSTEOTOMIA TIBIALE ALTA (LIMITATA, declassata): pu\u00F2 essere considerata per migliorare dolore e funzione in pazienti correttamente selezionati con artrosi monocompartimentale.",
+          "INTEGRATORI (LIMITATA, declassata due livelli per incoerenza): curcuma, estratto di zenzero, glucosamina, condroitina e vitamina D possono essere utili nel ridurre il dolore e migliorare la funzione nell'artrosi lieve-moderata, ma l'evidenza \u00E8 incoerente e limitata. \u26A0\uFE0F Negli Stati Uniti gli integratori non sono soggetti agli stessi standard dei farmaci su prescrizione; valutare le possibili interazioni farmacologiche prima di iniziarne l'assunzione.",
+          "\u2500\u2500\u2500 DICHIARAZIONI DI CONSENSO (nessuna evidenza affidabile) \u2500\u2500\u2500",
+          "DRY NEEDLING: in assenza di evidenza affidabile, secondo il gruppo di lavoro l'utilit\u00E0 e l'efficacia del dry needling non sono chiare e richiedono ulteriori evidenze.",
+          "DISPOSITIVI INTERPOSIZIONALI LIBERI: in assenza di evidenza affidabile o nuova, il gruppo di lavoro \u00E8 dell'opinione di NON usare dispositivi interposizionali non fissati nei pazienti con artrosi sintomatica del compartimento mediale."
+        ]
+      }
+    ]
+  },
+  {
+    id: 26,
+    category: "Reumatologia",
+    color: "#6B2D5C",
+    icon: "\u{1F9EC}",
+    title: "Spondilite Anchilosante e Spondiloartrite Assiale Non Radiografica \u2014 ACR 2019",
+    source: "Ward et al. | Arthritis Rheumatol 2019;71(10):1599-1613 | ACR / Spondylitis Association of America / SPARTAN",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC6764882/",
+    tags: ["spondilite anchilosante", "spondiloartrite assiale", "axSpA", "reumatologia", "lombalgia infiammatoria", "HLA-B27", "biologici"],
+    summary: "Aggiornamento 2019 delle raccomandazioni ACR per il trattamento della spondilite anchilosante (AS) e della spondiloartrite assiale non radiografica. \u26A0\uFE0F Documento prevalentemente FARMACOLOGICO, rivolto anche a fisioterapisti e fisiatri tra gli utilizzatori previsti: qui \u00E8 riportato ci\u00F2 che serve al fisioterapista per riconoscere la condizione, capire il percorso terapeutico del paziente e orientare le decisioni sull'imaging. Le raccomandazioni del 2015 su riabilitazione, chirurgia, educazione e prevenzione non sono state riesaminate e restano in vigore.",
+    sections: [
+      {
+        title: "Inquadramento per il Fisioterapista",
+        content: [
+          "DEFINIZIONE: la spondiloartrite assiale, che comprende spondilite anchilosante e forma non radiografica, \u00E8 la principale forma di artrite infiammatoria cronica che colpisce lo scheletro assiale.",
+          "PREVALENZA: la spondilite anchilosante interessa lo 0.1-0.5% della popolazione.",
+          "CARATTERISTICHE: lombalgia infiammatoria, sacroileite radiografica, eccessiva formazione ossea spinale ed elevata prevalenza di HLA-B27.",
+          "FORMA NON RADIOGRAFICA: condivide diverse caratteristiche con la spondilite anchilosante, ma sono assenti il danno avanzato dell'articolazione sacroiliaca e l'anchilosi del rachide.",
+          "\u26A0\uFE0F VARIABILIT\u00C0 CLINICA: la severit\u00E0 di artralgia, rigidit\u00E0 e limitazione della flessibilit\u00E0 varia ampiamente tra i pazienti e nel corso della malattia \u2014 elemento centrale per calibrare il carico riabilitativo.",
+          "MANIFESTAZIONI EXTRA-SCHELETRICHE: la malattia scheletrica pu\u00F2 accompagnarsi a uveite, psoriasi e malattia infiammatoria intestinale (IBD). Il loro riconoscimento \u00E8 rilevante perch\u00E9 condiziona la scelta del farmaco.",
+          "IMPATTO: la spondiloartrite assiale pu\u00F2 imporre un carico fisico e sociale sostanziale e interferire con lavoro e studio.",
+          "OBIETTIVI DEL TRATTAMENTO: alleviare i sintomi, migliorare la funzione, mantenere la capacit\u00E0 lavorativa, ridurre le complicanze e prevenire per quanto possibile il danno scheletrico.",
+          "UTILIZZATORI PREVISTI: reumatologi, medici di medicina generale, fisiatri, FISIOTERAPISTI e altri professionisti che assistono pazienti con spondiloartrite assiale.",
+          "\u26A0\uFE0F NOTA IMPORTANTE: questo aggiornamento non ha riesaminato tutte le raccomandazioni del 2015, concentrandosi sui quesiti per cui erano emerse nuove evidenze rilevanti. Le raccomandazioni 2015 su riabilitazione, uso della chirurgia, gestione delle comorbidit\u00E0, monitoraggio della malattia, educazione del paziente e cure preventive RESTANO IN VIGORE."
+        ]
+      },
+      {
+        title: "Percorso Farmacologico \u2014 Sintesi Operativa",
+        content: [
+          "Questa sezione serve a comprendere quale terapia sta seguendo il paziente e perch\u00E9, non a guidare la prescrizione, che resta di competenza reumatologica.",
+          "\u2500\u2500\u2500 MALATTIA ATTIVA \u2500\u2500\u2500",
+          "FANS: raccomandazione condizionale per il trattamento CONTINUATIVO rispetto a quello al bisogno, principalmente per il controllo dell'attivit\u00E0 di malattia. La decisione varia in base a severit\u00E0 dei sintomi, preferenze del paziente e comorbidit\u00E0, in particolare gastrointestinali, renali e cardiovascolari.",
+          "INIBITORI DEL TNF (TNFi): raccomandazione FORTE dopo fallimento dei FANS. Il panel considera adeguato un trial di almeno 2 FANS diversi a dose massimale per 1 mese, o risposte incomplete ad almeno 2 FANS diversi per 2 mesi, prima di passare ai TNFi.",
+          "Nessun TNFi specifico \u00E8 raccomandato come scelta preferenziale per il paziente tipico.",
+          "SECUKINUMAB O IXEKIZUMAB (anti IL-17): raccomandazione FORTE rispetto al non trattamento, ma i TNFi sono condizionalmente preferiti per la maggiore esperienza e conoscenza della sicurezza a lungo termine.",
+          "TOFACITINIB: i TNFi, il secukinumab e l'ixekizumab sono condizionalmente preferiti al tofacitinib.",
+          "\u2500\u2500\u2500 FALLIMENTO DEL PRIMO TNFi \u2500\u2500\u2500",
+          "NON RISPOSTA PRIMARIA: si raccomanda condizionalmente il passaggio a secukinumab o ixekizumab piuttosto che a un altro TNFi, nell'ipotesi che il TNF non sia il mediatore infiammatorio chiave in quei pazienti.",
+          "NON RISPOSTA SECONDARIA (ricaduta dopo risposta iniziale): si raccomanda condizionalmente il passaggio a un TNFi diverso piuttosto che a un biologico di altra classe.",
+          "\u26A0\uFE0F Raccomandazione FORTE CONTRO il passaggio al biosimilare del primo TNFi in caso di non risposta: la risposta clinica non sarebbe diversa.",
+          "\u2500\u2500\u2500 MALATTIA STABILE \u2500\u2500\u2500",
+          "FANS al bisogno, condizionalmente preferiti al trattamento continuativo.",
+          "\u26A0\uFE0F Raccomandazione condizionale CONTRO la sospensione del biologico: la sospensione dopo remissione o bassa attivit\u00E0 comporta ricadute nel 60-74% dei pazienti, talvolta entro poche settimane o mesi.",
+          "\u26A0\uFE0F Raccomandazione condizionale CONTRO la riduzione graduale della dose come approccio standard.",
+          "Raccomandazione FORTE per la prosecuzione del TNFi originatore piuttosto che il passaggio obbligato al biosimilare durante il trattamento.",
+          "\u2500\u2500\u2500 COMORBIDIT\u00C0 \u2500\u2500\u2500",
+          "UVEITE RICORRENTE: anticorpi monoclonali anti-TNF condizionalmente preferiti agli altri biologici. Adalimumab e infliximab preferiti a etanercept.",
+          "MALATTIA INFIAMMATORIA INTESTINALE: anticorpi monoclonali anti-TNF condizionalmente preferiti. \u26A0\uFE0F Il secukinumab \u00E8 stato associato a nuova insorgenza o riacutizzazione di malattia di Crohn; rischi analoghi sembrano riguardare l'ixekizumab."
+        ]
+      },
+      {
+        title: "Valutazione dell'Attivit\u00E0 e Imaging",
+        content: [
+          "\u26A0\uFE0F TREAT-TO-TARGET: raccomandazione condizionale CONTRO l'uso di una strategia treat-to-target con obiettivo ASDAS <1.3 (o 2.1) rispetto a una strategia basata sulla valutazione clinica del medico.",
+          "MOTIVAZIONE: l'approccio treat-to-target in AS \u00E8 sostenuto solo indirettamente dalle associazioni tra livelli di attivit\u00E0 e progressione radiografica futura, ma manca di evidenza diretta robusta. Il panel ha inoltre espresso preoccupazione che la focalizzazione su un target specifico possa portare a un rapido esaurimento di tutti i trattamenti disponibili in alcuni pazienti.",
+          "Resta comunque importante quantificare l'attivit\u00E0 di malattia per guidare le decisioni terapeutiche.",
+          "\u2500\u2500\u2500 RISONANZA MAGNETICA \u2500\u2500\u2500",
+          "ATTIVIT\u00C0 NON CHIARA in paziente in trattamento con biologico: raccomandazione condizionale A FAVORE di RM del rachide o del bacino per valutare l'attivit\u00E0. Nella forma non radiografica l'imaging va focalizzato sulle sacroiliache.",
+          "RAZIONALE: misure fisiche e di laboratorio sono spesso normali nonostante la malattia sia attiva, e i sintomi possono essere aspecifici.",
+          "\u26A0\uFE0F MALATTIA STABILE: raccomandazione condizionale CONTRO l'esecuzione della RM per confermare l'inattivit\u00E0. Motivi: assenza di evidenza che migliori gli esiti, sensibilit\u00E0 e specificit\u00E0 solo moderate delle alterazioni RM, carico dell'esame e rischio di sovratrattamento.",
+          "\u26A0\uFE0F INTERPRETAZIONE: nella lettura della RM va tenuto presente il range e la frequenza di alterazioni, incluse le lesioni da edema midollare, che possono comparire in soggetti SENZA spondiloartrite assiale e non rappresentare infiammazione da axSpA.",
+          "Il grado di alterazione infiammatoria alla RM pu\u00F2 non correlare con la risposta al trattamento, e la sede dell'infiammazione pu\u00F2 non correlare con la sede del dolore.",
+          "\u2500\u2500\u2500 RADIOGRAFIE \u2500\u2500\u2500",
+          "\u26A0\uFE0F Raccomandazione condizionale CONTRO l'esecuzione di radiografie del rachide a intervalli programmati (per esempio ogni 2 anni) come approccio standard, sia in malattia attiva sia stabile.",
+          "MOTIVAZIONE: nessuna evidenza che il monitoraggio seriato migliori gli esiti; assenza di dati che bilancino il beneficio clinico con il rischio da esposizione radiante. Negli studi di ricerca si rilevano piccoli cambiamenti nel 20-35% dei pazienti su un intervallo di 2 anni.",
+          "Le radiografie del rachide restano utili per la diagnosi, per valutare l'estensione dell'anchilosi e per indagare un nuovo dolore spinale in un paziente con AS accertata."
+        ]
+      }
+    ]
+  },
+  {
+    id: 27,
+    category: "Reumatologia",
+    color: "#6B2D5C",
+    icon: "\u{1FAB4}",
+    title: "Artrite Psoriasica \u2014 Linea Guida ACR/NPF 2018",
+    source: "Singh et al. | Arthritis Care Res 2019;71(1):2-29 | American College of Rheumatology / National Psoriasis Foundation",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC8265826/",
+    pdfUrl2: "https://acrjournals.onlinelibrary.wiley.com/doi/full/10.1002/acr.23789",
+    tags: ["artrite psoriasica", "PsA", "entesite", "dattilite", "reumatologia", "esercizio", "psoriasi"],
+    summary: "Prima linea guida congiunta ACR e National Psoriasis Foundation per il trattamento dell'artrite psoriasica attiva nell'adulto. \u26A0\uFE0F Documento prevalentemente FARMACOLOGICO: il 94% delle raccomandazioni \u00E8 condizionale e basato su evidenza di qualit\u00E0 bassa o molto bassa. Qui sono riportati inquadramento clinico, raccomandazioni non farmacologiche (l'unica sezione direttamente fisioterapica) e sintesi del percorso farmacologico.",
+    sections: [
+      {
+        title: "Inquadramento Clinico",
+        content: [
+          "DEFINIZIONE: malattia muscoloscheletrica infiammatoria cronica associata a psoriasi, che si manifesta pi\u00F9 comunemente con artrite periferica, dattilite, entesite e spondilite.",
+          "UNGHIE: lesioni ungueali, incluse pitting e onicolisi, si osservano nel 80-90% circa dei pazienti con artrite psoriasica \u2014 elemento di sospetto rilevante all'esame obiettivo.",
+          "EPIDEMIOLOGIA: incidenza circa 6 per 100.000 all'anno; prevalenza circa 1-2 per 1.000 nella popolazione generale. Nei pazienti con psoriasi l'incidenza annuale \u00E8 del 2.7% e la prevalenza riportata varia dal 6% al 41%.",
+          "SEQUENZA: nella maggioranza dei pazienti i sintomi cutanei compaiono per primi, seguiti dall'artrite; in alcuni compaiono insieme e nel 10-15% l'artrite precede la psoriasi.",
+          "SESSO: colpisce uomini e donne in egual misura.",
+          "DISTRIBUZIONE ARTICOLARE: varia dall'oligoartrite asimmetrica (\u22644 articolazioni) alla poliartrite simmetrica (\u22655 articolazioni). Le interfalangee distali sono comunemente colpite e in alcuni pazienti sono le uniche articolazioni interessate.",
+          "MALATTIA ASSIALE: quando presente, si manifesta di solito insieme all'artrite periferica.",
+          "\u26A0\uFE0F ARTRITE MUTILANS: alcuni pazienti presentano una forma rapidamente progressiva e distruttiva.",
+          "PROGNOSI: una maggiore attivit\u00E0 di malattia si associa a danno articolare progressivo e mortalit\u00E0 pi\u00F9 elevata. L'identificazione precoce e l'avvio tempestivo della terapia sono importanti per migliorare gli esiti a lungo termine.",
+          "DEFINIZIONE DI MALATTIA ATTIVA: sintomi a livello inaccettabilmente fastidioso riferito dal paziente e giudicati dal clinico come dovuti alla PsA per la presenza di almeno uno tra: articolazioni attivamente infiammate, dattilite, entesite, malattia assiale, coinvolgimento cutaneo e/o ungueale attivo, manifestazioni extra-articolari come uveite o IBD.",
+          "FATTORI DI PROGNOSI SFAVOREVOLE: malattia erosiva, dattilite, indici di infiammazione elevati (VES e PCR) attribuibili alla PsA.",
+          "ESAME OBIETTIVO NECESSARIO alla scelta terapeutica: valutazione delle articolazioni periferiche (dattilite compresa), delle entesi, del rachide, della cute e delle unghie."
+        ]
+      },
+      {
+        title: "Raccomandazioni NON Farmacologiche",
+        content: [
+          "\u2500\u2500\u2500 L'UNICA SEZIONE DIRETTAMENTE FISIOTERAPICA \u2500\u2500\u2500",
+          "Tutte le raccomandazioni non farmacologiche sono CONDIZIONALI e basate su evidenza di qualit\u00E0 bassa o molto bassa, tranne la cessazione del fumo che \u00E8 una raccomandazione FORTE. Si applicano ai pazienti con PsA attiva indipendentemente dallo stato del trattamento farmacologico.",
+          "ESERCIZIO E TERAPIE FISICHE (condizionale): si raccomanda che i pazienti con PsA attiva usino qualche forma o combinazione di esercizio, fisioterapia, terapia occupazionale, massoterapia e agopuntura, rispetto al non usarle, secondo tolleranza.",
+          "TIPO DI ESERCIZIO (condizionale): l'esercizio a BASSO impatto \u2014 per esempio tai chi, yoga, nuoto \u2014 \u00E8 raccomandato rispetto all'esercizio ad ALTO impatto come la corsa.",
+          "\u2192 L'esercizio ad alto impatto pu\u00F2 comunque essere svolto dai pazienti che lo preferiscono e non hanno controindicazioni.",
+          "CESSAZIONE DEL FUMO (FORTE): i clinici DOVREBBERO incoraggiare i pazienti a smettere di fumare, offrendo supporti alla cessazione. La raccomandazione si basa sull'efficacia dimostrata negli RCT in altre condizioni e nella popolazione generale.",
+          "CALO PONDERALE (condizionale): nei pazienti con PsA in sovrappeso o obesi \u00E8 raccomandata la perdita di peso, per aumentare potenzialmente la risposta farmacologica.",
+          "\u2500\u2500\u2500 IMPLICAZIONE PRATICA \u2500\u2500\u2500",
+          "La combinazione modalit\u00E0 a basso impatto, cessazione del fumo e gestione del peso rappresenta il contributo fisioterapico riconosciuto da questa linea guida. La formulazione 'secondo tolleranza' \u00E8 esplicita e va rispettata: l'entesite e la dattilite attive limitano il carico tollerabile.",
+          "\u26A0\uFE0F Il documento non specifica dosaggi, frequenze o progressioni per l'esercizio: quelle vanno costruite sulla presentazione individuale e sui domini attivi di malattia."
+        ]
+      },
+      {
+        title: "Percorso Farmacologico \u2014 Sintesi",
+        content: [
+          "Sezione di orientamento per comprendere la terapia del paziente, non per guidarne la prescrizione. Il 94% delle raccomandazioni \u00E8 condizionale; solo il 6% \u00E8 forte.",
+          "\u2500\u2500\u2500 PAZIENTE NAIVE AL TRATTAMENTO \u2500\u2500\u2500",
+          "Un biologico anti-TNF \u00E8 condizionalmente raccomandato rispetto alle piccole molecole orali (OSM) come opzione di prima linea.",
+          "Le OSM possono essere usate al posto dell'anti-TNF nei pazienti senza PsA severa e senza psoriasi severa, in chi preferisce una terapia orale, o in presenza di controindicazioni agli anti-TNF: infezioni ricorrenti, scompenso cardiaco congestizio, malattia demielinizzante.",
+          "Il metotrexato \u00E8 raccomandato rispetto ai FANS nei pazienti naive con PsA attiva.",
+          "\u2500\u2500\u2500 MALATTIA ASSIALE (spondilite psoriasica) \u2500\u2500\u2500",
+          "Per la PsA assiale vanno seguite le raccomandazioni ACR per la spondiloartrite assiale (guida dedicata in questa app).",
+          "\u26A0\uFE0F Le piccole molecole orali NON sono efficaci sulla malattia assiale.",
+          "Dopo fallimento dei FANS: anti-TNF condizionalmente preferito ad anti IL-17 e anti IL-12/23; anti IL-17 preferito ad anti IL-12/23.",
+          "\u2500\u2500\u2500 ENTESITE PREDOMINANTE \u2500\u2500\u2500",
+          "Nei pazienti naive con entesite predominante, un anti-TNF \u00E8 condizionalmente raccomandato rispetto alle OSM come prima linea.",
+          "Tra le piccole molecole orali, solo l'apremilast ha mostrato efficacia sull'entesite.",
+          "I FANS orali sono raccomandati rispetto all'avvio di una OSM, salvo malattia cardiovascolare, ulcera peptica, malattia o insufficienza renale, o psoriasi/PsA severa.",
+          "\u2500\u2500\u2500 TREAT-TO-TARGET \u2500\u2500\u2500",
+          "Nei pazienti con PsA attiva, una strategia treat-to-target \u00E8 condizionalmente raccomandata rispetto al non usarla. Si pu\u00F2 considerare di non adottarla in presenza di preoccupazioni su eventi avversi, costi della terapia e carico farmacologico per il paziente.",
+          "\u26A0\uFE0F Il concetto di treat-to-target \u00E8 risultato problematico per i pazienti del panel: pur vedendone il valore, temevano aumento dei costi (ticket, spostamenti per visite pi\u00F9 frequenti) e maggiori eventi avversi.",
+          "\u2500\u2500\u2500 COMORBIDIT\u00C0 \u2500\u2500\u2500",
+          "IBD ATTIVA (raccomandazioni FORTI): anticorpo monoclonale anti-TNF o anti IL-12/23 raccomandati rispetto ad anti IL-17; anticorpo monoclonale anti-TNF raccomandato rispetto a etanercept.",
+          "DIABETE: nei pazienti naive con diabete attivo, una OSM diversa dal metotrexato \u00E8 condizionalmente preferita all'anti-TNF, per il rischio di steatosi epatica e tossicit\u00E0 epatica con metotrexato in questa popolazione.",
+          "INFEZIONI GRAVI FREQUENTI: una OSM \u00E8 FORTEMENTE raccomandata rispetto all'anti-TNF come prima linea, per la black box warning contro l'uso di anti-TNF in questi pazienti."
+        ]
+      }
+    ]
+  },
+  {
+    id: 28,
+    category: "Ginocchio",
+    color: "#0E6B5E",
+    icon: "\u{1F6E1}\uFE0F",
+    title: "Prevenzione degli Infortuni di Ginocchio e LCA \u2014 CPG Revisione 2023",
+    source: "Arundale et al. | JOSPT 2023;53(1):CPG1-CPG34 | APTA Orthopedics + American Academy of Sports Physical Therapy",
+    pdfUrl: "https://www.orthopt.org/uploads/content_files/files/jospt.2023.0301.pdf",
+    pdfUrl2: "https://www.jospt.org/doi/suppl/10.2519/jospt.2018.0303",
+    tags: ["prevenzione", "LCA", "ACL", "ginocchio", "FIFA 11+", "PEP", "calcio", "training neuromuscolare", "CPG"],
+    summary: "Revisione 2023 della CPG sulla prevenzione degli infortuni di ginocchio e del legamento crociato anteriore basata sull'esercizio. Aggiorna la versione 2018. Definisce quali programmi funzionano, in quali popolazioni, con quale dosaggio e come implementarli. Include i contenuti dettagliati dei principali programmi (11+, PEP, HarmoKnee, Knäkontroll, Sportsmetrics, KLIP).",
+    sections: [
+      {
+        title: "Efficacia \u2014 Raccomandazioni Principali",
+        content: [
+          "DEFINIZIONE DI PREVENZIONE BASATA SULL'ESERCIZIO: intervento che richiede al partecipante di essere attivo e di muoversi. Include attivit\u00E0 fisica, rinforzo, stretching, esercizi neuromuscolari, propriocettivi, di agilit\u00E0 e pliometrici. ESCLUDE interventi passivi come il bracing e i programmi di sola educazione.",
+          "INFORTUNIO DI GINOCCHIO: qualsiasi patologia articolare, femoro-rotulea o femoro-tibiale, dei legamenti, del menisco o del tendine rotuleo.",
+          "\u2500\u2500\u2500 RACCOMANDAZIONE PRINCIPALE (Grado A) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO raccomandare l'uso di programmi di prevenzione basati sull'esercizio negli atleti, per la prevenzione degli infortuni di ginocchio e del LCA.",
+          "PROGRAMMI PER RIDURRE TUTTI GLI INFORTUNI DI GINOCCHIO: 11+ e FIFA 11, HarmoKnee, Kn\u00E4kontroll, e quelli di Emery e Meeuwisse, Goodall, Junge, LaBella, Malliou, Olsen, Pasanen, Petersen e Wedderkopp.",
+          "PROGRAMMI PER RIDURRE GLI INFORTUNI DI LCA: HarmoKnee, Kn\u00E4kontroll, PEP (Prevent Injury and Enhance Performance) e Sportsmetrics, oltre a quelli di Caraffa, Heidt, LaBella, Myklebust, Olsen e Petersen.",
+          "\u2500\u2500\u2500 ENTIT\u00C0 DELL'EFFETTO \u2500\u2500\u2500",
+          "Meta-analisi di 8 meta-analisi (oltre 40.000 nel gruppo trattamento e 52.000 nei controlli): riduzione del 50% del rischio di TUTTI gli infortuni di LCA e del 67% del rischio di LCA da NON contatto nelle donne.",
+          "Meta-analisi su 8 studi e 13.562 partecipanti: riduzione del 53% del tasso di infortunio di LCA in chi partecipa a un programma di prevenzione.",
+          "\u2500\u2500\u2500 PREVENZIONE SECONDARIA (Grado C) \u2500\u2500\u2500",
+          "I clinici POSSONO raccomandare un programma di training neuromuscolare nella FASE TARDIVA della riabilitazione post-ricostruzione di LCA, per la prevenzione secondaria.",
+          "\u26A0\uFE0F NOVIT\u00C0 2023: nella CPG 2018 nessuno studio sulla prevenzione secondaria soddisfaceva i criteri di inclusione. Ora due studi dallo stesso RCT forniscono le prime evidenze.",
+          "DATI ACL-SPORTS: negli uomini, il 95% \u00E8 tornato allo sport a 1 anno e il 78% al livello pre-infortunio; a 2 anni 100% e 95%. Tasso complessivo di secondo infortunio di LCA: 0.025 per atleta, inferiore alla letteratura pubblicata. Nelle donne, tasso di re-infortunio del 23% e di secondo infortunio omolaterale del 10%."
+        ]
+      },
+      {
+        title: "Popolazioni Specifiche",
+        content: [
+          "\u2500\u2500\u2500 ATLETE DONNE (Grado A) \u2500\u2500\u2500",
+          "Clinici, allenatori, genitori e atlete DOVREBBERO implementare programmi di prevenzione PRIMA di allenamenti o partite nelle atlete donne, per ridurre il rischio di infortuni di LCA, SPECIALMENTE sotto i 18 anni.",
+          "Programmi da implementare: PEP, Sportsmetrics, Kn\u00E4kontroll, HarmoKnee, e quelli di Olsen e Petersen.",
+          "DATO: il training neuromuscolare riduce il rischio di LCA da 1 su 54 a 1 su 111 (OR 0.51). La riduzione \u00E8 MAGGIORE nelle atlete di scuola media e superiore (OR 0.38) rispetto a universitarie e professioniste (OR 0.65).",
+          "\u2500\u2500\u2500 CALCIO \u2014 UOMINI E DONNE (Grado A) \u2500\u2500\u2500",
+          "\u26A0\uFE0F CAMBIAMENTO 2023: la raccomandazione 2018 diceva 'calciatori, SOPRATTUTTO donne'. La revisione 2023 dice 'calciatori, SIA donne SIA uomini'. Le nuove evidenze hanno esteso la raccomandazione al calcio maschile.",
+          "I calciatori DOVREBBERO usare programmi di prevenzione basati sull'esercizio per ridurre il rischio di infortuni severi di ginocchio e di LCA.",
+          "Per gli infortuni SEVERI di ginocchio: PEP, Kn\u00E4kontroll, HarmoKnee. Specificamente per il LCA: 11+, Sportsmetrics e il programma di Caraffa.",
+          "STUDIO FIFA 11+ NEL CALCIO MASCHILE UNIVERSITARIO: riduzione complessiva del tasso di infortuni di LCA (RR 0.24). Nessuna differenza tra partite e allenamenti, tra ruoli, tra tipi di terreno o in Division I; riduzione significativa in Division II (RR 0.12).",
+          "STUDIO SU CALCIO D'\u00C9LITE MASCHILE (26 squadre di intervento, 529 giocatori, contro 36 squadre di controllo, 601 giocatori): riduzione significativa degli infortuni SEVERI di ginocchio nel gruppo intervento, 0.38 contro 0.68 per 1000 ore di esposizione, con prevalenza 9.8% contro 18.0%.",
+          "\u26A0\uFE0F Nello stesso studio NON si osservavano differenze nell'incidenza complessiva di infortunio, n\u00E9 negli infortuni di coscia o caviglia. Le lesioni di collaterale mediale e laterale erano invece significativamente pi\u00F9 alte nel gruppo di controllo.",
+          "\u2500\u2500\u2500 PALLAMANO (Grado B) \u2500\u2500\u2500",
+          "Giocatori e giocatrici di pallamano, in particolare tra i 15 e i 17 anni, DOVREBBERO implementare programmi di prevenzione. Utili quelli di Olsen e Achenbach.",
+          "\u2500\u2500\u2500 LACUNE \u2500\u2500\u2500",
+          "\u26A0\uFE0F Nessuna nuova ricerca su basket, pallavolo e negli uomini in generale (fuori dal calcio). Servono studi su netball, football australiano e sport individuali come lo sci.",
+          "La maggior parte degli studi proviene da Stati Uniti, Nord Europa e Australia, con dati demografici limitati oltre a et\u00E0 e sesso."
+        ]
+      },
+      {
+        title: "Componenti, Dosaggio e Compliance",
+        content: [
+          "\u2500\u2500\u2500 COMPONENTI (Grado A) \u2500\u2500\u2500",
+          "I programmi usati per le donne DEVONO incorporare COMPONENTI MULTIPLE, ESERCIZI DI CONTROLLO PROSSIMALE e una COMBINAZIONE di esercizi di forza e pliometrici.",
+          "NUOVA EVIDENZA 2023: uno studio prospettico su basket femminile universitario con training neuromuscolare focalizzato sull'ANCA ha ridotto gli infortuni di LCA da non contatto (RR 0.37; NNT 41.3). Il programma prevedeva 3 sessioni educative sulla biomeccanica, poi intervento 3 volte a settimana con sessioni di circa 20 minuti, progredito 3 volte nella stagione. Compliance dell'89%.",
+          "\u2500\u2500\u2500 DOSAGGIO (Grado A) \u2500\u2500\u2500",
+          "I programmi DEVONO prevedere allenamento PI\u00D9 VOLTE A SETTIMANA, sessioni di durata SUPERIORE A 20 MINUTI e volumi settimanali SUPERIORI A 30 MINUTI.",
+          "\u2500\u2500\u2500 PERIODIZZAZIONE STAGIONALE (Grado A) \u2500\u2500\u2500",
+          "I programmi vanno iniziati in PRE-STAGIONE e proseguiti per tutta la stagione regolare.",
+          "\u2500\u2500\u2500 COMPLIANCE (Grado A) \u2500\u2500\u2500",
+          "Clinici, allenatori, genitori e atleti DEVONO assicurare un'ALTA COMPLIANCE, particolarmente nelle atlete donne. \u00C8 formulata come obbligo forte, non come suggerimento.",
+          "\u2500\u2500\u2500 EQUILIBRIO \u2014 ATTENZIONE (Grado B) \u2500\u2500\u2500",
+          "\u26A0\uFE0F I programmi POSSONO NON aver bisogno di incorporare esercizi di equilibrio, e l'equilibrio NON deve essere l'unica componente di un programma.",
+          "\u2192 Contro-intuitivo ma importante: l'equilibrio da solo non previene gli infortuni di ginocchio. Servono forza e pliometria.",
+          "\u2500\u2500\u2500 LACUNE \u2500\u2500\u2500",
+          "Serve ancora ricerca sulla relazione dose-risposta e su come migliorare compliance e aderenza.",
+          "Quasi tutti i programmi sono progettati come riscaldamento dinamico PRIMA dell'allenamento. Programmi recenti hanno esplorato modelli alternativi, come eseguire la parte di rinforzo AL TERMINE della sessione, con buoni risultati di efficacia e implementazione: un'area che merita ulteriore ricerca."
+        ]
+      },
+      {
+        title: "Implementazione \u2014 Chi, Quando, Chi Guida",
+        content: [
+          "\u2500\u2500\u2500 SCREENING NON NECESSARIO (Grado A) \u2500\u2500\u2500",
+          "\u26A0\uFE0F I programmi vanno implementati in TUTTI i giovani atleti, non solo in quelli identificati tramite screening come ad alto rischio di infortunio di LCA, per mitigare in modo ottimale gli infortuni e ridurre i costi.",
+          "RAZIONALE: non c'\u00E8 aumento del rischio di eventi avversi quando tutti gli atleti eseguono i programmi rispetto ai soli screenati ad alto rischio, e non c'\u00E8 alcun danno nell'eseguirli. L'eventuale piccolo aumento di costo \u00E8 ampiamente compensato dai costi sanitari a lungo termine evitati.",
+          "\u2192 Implicazione pratica: non serve un protocollo di screening biomeccanico per decidere chi includere. Si include tutta la squadra.",
+          "\u2500\u2500\u2500 FASCIA D'ET\u00C0 PRIORITARIA (Grado A) \u2500\u2500\u2500",
+          "Per la massima riduzione dei costi sanitari futuri e per prevenire infortuni di LCA, ARTROSI e PROTESI TOTALI DI GINOCCHIO, va incoraggiata l'implementazione negli atleti tra i 12 e i 25 anni impegnati in sport ad alto rischio di LCA.",
+          "SPORT AD ALTO RISCHIO definiti nel documento: rugby, football australiano, netball, calcio, basket e sci.",
+          "\u2500\u2500\u2500 CHI CONDUCE IL PROGRAMMA (Grado B) \u2500\u2500\u2500",
+          "Va sostenuta l'implementazione di programmi condotti dagli ALLENATORI oppure da un gruppo di allenatori e professionisti sanitari.",
+          "\u2192 Non serve che sia un fisioterapista a condurre ogni sessione: l'evidenza sostiene la conduzione da parte dello staff tecnico, eventualmente in collaborazione con lo staff medico.",
+          "DATO DI SUPPORTO: in uno studio su scuole superiori, le squadre di calcio maschile che praticavano training neuromuscolare avevano un tasso di infortunio di LCA significativamente inferiore alla letteratura QUANDO era disponibile un athletic trainer per la squadra. Gli autori concludono che la figura sanitaria pu\u00F2 facilitare l'esecuzione dei programmi.",
+          "\u2500\u2500\u2500 STAKEHOLDER \u2500\u2500\u2500",
+          "L'implementazione resta il passaggio cruciale per ridurre il peso degli infortuni. Gli stakeholder chiave includono federazioni nazionali, leghe, club, arbitri e associazioni arbitrali, squadre, allenatori, genitori, atleti, professionisti sanitari e del fitness, media."
+        ]
+      },
+      {
+        title: "Contenuti dei Programmi \u2014 FIFA 11+ e PEP",
+        content: [
+          "\u2500\u2500\u2500 11+ (ex FIFA 11+) \u2500\u2500\u2500",
+          "CORSA \u2014 8 minuti a inizio riscaldamento, 2 alla fine, 2 ripetizioni ciascuno.",
+          "Inizio: corsa in avanti | corsa con anca in fuori | corsa con anca in dentro | corsa girando attorno al compagno | corsa con contatto di spalla | corsa rapida avanti e indietro.",
+          "Fine: corsa attraverso il campo | balzi (bounding) | corsa con appoggio e cambio di direzione.",
+          "FORZA \u2014 10 minuti complessivi insieme a pliometria ed equilibrio.",
+          "\u2022 The Bench (plank): 3 \u00D7 20-30 s \u2014 liv.1 statico | liv.2 alternando le gambe | liv.3 sollevando e mantenendo una gamba",
+          "\u2022 Sideways Bench (plank laterale): 3 \u00D7 20-30 s per lato \u2014 liv.1 statico | liv.2 alzando e abbassando l'anca | liv.3 con sollevamento della gamba",
+          "\u2022 Ischiocrurali (Nordic): liv.1 principiante 3-4 rip | liv.2 intermedio 7-10 | liv.3 avanzato 12-15",
+          "\u2022 Squat: liv.1 con sollevamento sulle punte 2 \u00D7 30 s | liv.2 affondi camminati 2 \u00D7 30 s | liv.3 squat monopodalico 2 \u00D7 30 s per gamba",
+          "PLIOMETRIA \u2014 Salti 2 \u00D7 30 s: liv.1 salti verticali | liv.2 salti laterali | liv.3 box jump.",
+          "EQUILIBRIO \u2014 Appoggio monopodalico 2 \u00D7 30 s: liv.1 tenendo il pallone | liv.2 passandosi il pallone con il compagno | liv.3 destabilizzando il compagno.",
+          "\u2500\u2500\u2500 PEP (Prevent Injury and Enhance Performance) \u2500\u2500\u2500",
+          "FLESSIBILIT\u00C0 \u2014 50 yard ciascuno, 30 secondi \u00D7 2 ripetizioni: polpaccio | quadricipite | ischiocrurali in figura di 4 | adduttori | flessori d'anca.",
+          "CORSA \u2014 50 yard ciascuno, 2 ripetizioni: corsa lenta da linea a linea | navetta laterale | corsa all'indietro | navetta avanti-indietro (40 yd) | corse diagonali (40 yd) | balzi (45-50 yd).",
+          "FORZA \u2014 affondi camminati 20 yd \u00D7 2 serie | Russian hamstring (Nordic) 3 serie \u00D7 10 rip o 30 s | sollevamenti monopodalici sulle punte 30 rip per lato.",
+          "PLIOMETRIA \u2014 coni da 5-15 cm, 20 rip o 30 s ciascuno: salti laterali sopra il cono | salti avanti-indietro sopra il cono."
+        ]
+      },
+      {
+        title: "Contenuti dei Programmi \u2014 HarmoKnee, Knäkontroll, Altri",
+        content: [
+          "\u2500\u2500\u2500 HARMOKNEE \u2500\u2500\u2500",
+          "ATTIVAZIONE E FLESSIBILIT\u00C0 \u2014 circa 2 minuti totali, mantenendo la posizione e contraendo per circa 4 secondi, con l'obiettivo di 'trovare' il muscolo. Lo stretching \u00E8 raccomandato SOLO in caso di ROM limitato. Esercizi: polpaccio in piedi | quadricipite in piedi | ischiocrurali in mezzo inginocchiamento | flessori d'anca in mezzo inginocchiamento | adduttori a farfalla | figura di 4 modificata.",
+          "CORSA \u2014 10 minuti totali: corsa lenta (4-6 min) | corsa all'indietro sulle punte (1 min) | skip a ginocchia alte (30 s) | tecnica di pressione difensiva, scivolamenti lenti a zigzag all'indietro (30 s) | alternanza corsa a zigzag in avanti e pressione all'indietro (2 min).",
+          "FORZA \u2014 1 minuto ciascuno: affondi sul posto | Nordic hamstring eccentrico | squat monopodalico con sollevamento sulle punte.",
+          "CORE \u2014 1 minuto ciascuno: sit-up | plank sui gomiti | ponte.",
+          "PLIOMETRIA \u2014 30 secondi ciascuno: salti bipodalici avanti-indietro | salti monopodalici laterali | salti monopodalici avanti-indietro | salto bipodalico con o senza pallone.",
+          "\u2500\u2500\u2500 KN\u00C4KONTROLL \u2014 struttura a 5 livelli progressivi \u2500\u2500\u2500",
+          "FORZA \u2014 3 serie da 8-15 ripetizioni, ogni esercizio con livelli di difficolt\u00E0 crescenti.",
+          "\u2022 Squat bipodalico: liv.1 base \u2192 liv.2 con sollevamento tallone \u2192 liv.3 con palla sopra la testa \u2192 liv.4 con palla davanti al corpo \u2192 liv.5 in coppia, con pressione sulla palla tenuta tra i due",
+          "\u2022 Affondo: liv.1 camminato in avanti \u2192 liv.2 con rotazione laterale del tronco \u2192 liv.3 con palla sopra la testa \u2192 liv.4 laterale \u2192 liv.5 con rimessa laterale verso il compagno",
+          "\u2022 Squat monopodalico: liv.1 base \u2192 liv.2 con palla sopra la testa \u2192 liv.3 con gamba libera in posizioni diverse \u2192 liv.4 stacco rumeno monopodalico \u2192 liv.5 in coppia con pressione sui piedi delle gambe libere",
+          "CORE \u2014 15-30 secondi: plank sulle ginocchia \u2192 sulle punte \u2192 con passo laterale \u2192 plank laterale \u2192 in coppia. Ponte bipodalico \u2192 monopodalico \u2192 monopodalico su palla \u2192 monopodalico con saltello \u2192 in coppia.",
+          "PLIOMETRIA \u2014 3 serie da 5-15 ripetizioni: salti monopodalici avanti-indietro \u2192 salti bipodalici laterali con atterraggio monopodalico \u2192 passi rapidi sul posto e salto breve in avanti con atterraggio monopodalico \u2192 stesso con cambio di direzione a 90\u00B0 \u2192 in coppia, salto bipodalico con colpo di testa e atterraggio bipodalico.",
+          "\u2500\u2500\u2500 ALTRI PROGRAMMI \u2500\u2500\u2500",
+          "SPORTSMETRICS: richiede attrezzatura per il rinforzo (macchine, pesi). Ampia batteria pliometrica progressiva: wall jump, tuck jump, salti in lungo con atterraggio bloccato, squat jump, salti bipodalici su coni, salti a 180\u00B0, balzi sul posto, salti monopodalici per distanza.",
+          "KLIP (Knee Ligament Injury Prevention): 4 fasi da 2 settimane ciascuna. Agilit\u00E0 (drill a W, figure di 8, tagli destra-sinistra) e pliometria progressiva fino ai salti monopodalici tripli.",
+          "OLSEN et al.: include lavoro con tappetino o tavoletta propriocettiva \u2014 passaggi bipodalici, squat, passaggi monopodalici, palleggio a occhi chiusi, destabilizzazione reciproca.",
+          "ACHENBACH et al.: equilibrio monopodalico a occhi chiusi con destabilizzazione del compagno, salti monopodalici multidirezionali, salti da pattinatore, Nordic hamstring, plank frontale e laterale.",
+          "\u26A0\uFE0F I video delle sequenze di riscaldamento per sport di campo e di palazzetto sono disponibili gratuitamente come materiale supplementare della CPG 2018, tuttora valido (link 'Protocollo Riabilitativo' qui sopra)."
+        ]
+      }
+    ]
+  },
+  {
+    id: 29,
+    category: "Spalla",
+    color: "#5C3A8C",
+    icon: "\u{1F9CA}",
+    title: "Capsulite Adesiva (Spalla Congelata) \u2014 CPG APTA 2013",
+    source: "Kelley et al. | JOSPT 2013;43(5):A1-A31 | Orthopaedic Section APTA",
+    pdfUrl: "https://www.orthopt.org/uploads/content_files/ICF/Updated_Guidelines/Shoulder_Guidelines_AdhesiveCapsulitis_JOSPT_May_2013.pdf",
+    pdfUrl2: "https://www.orthopt.org/uploads/content_files/files/Shoulder%20Adhesive%20Capsulitis%20Decision%20Tree%20and%20Components.pdf",
+    tags: ["spalla", "capsulite adesiva", "spalla congelata", "frozen shoulder", "irritabilit\u00E0", "ROM", "CPG"],
+    summary: "Linea guida CPG sulla capsulite adesiva, primaria idiopatica e secondaria. Il contributo centrale \u00E8 il modello di classificazione per LIVELLO DI IRRITABILIT\u00C0 TISSUTALE, che guida la scelta e l'intensit\u00E0 del trattamento. Include criteri diagnostici differenziali, stadiazione clinica in 4 fasi e raccomandazioni graduate sugli interventi.",
+    sections: [
+      {
+        title: "Il Modello dell'Irritabilit\u00E0 Tissutale \u2014 Cuore della Guida",
+        content: [
+          "PRINCIPIO: l'irritabilit\u00E0 riflette la capacit\u00E0 del tessuto di tollerare lo stress fisico, ed \u00E8 legata allo stato fisico e all'entit\u00E0 dell'attivit\u00E0 infiammatoria presente. \u00C8 il parametro che determina frequenza, intensit\u00E0, durata e tipo di trattamento.",
+          "\u26A0\uFE0F IL REPERTO DECISIVO \u00E8 la RELAZIONE TRA DOLORE E MOVIMENTO ATTIVO E PASSIVO. Gli altri elementi \u2014 livello di dolore, frequenza, disabilit\u00E0 riferita \u2014 completano il quadro.",
+          "\u2500\u2500\u2500 IRRITABILIT\u00C0 ALTA \u2500\u2500\u2500",
+          "CARATTERISTICHE: dolore \u22657/10 | dolore notturno o a riposo COSTANTE | alti livelli di disabilit\u00E0 riferita | il dolore compare PRIMA del fine corsa attivo o passivo | ROM attivo significativamente MINORE del passivo a causa del dolore.",
+          "TRATTAMENTO \u2014 Terapie fisiche: calore per la modulazione del dolore; elettrostimolazione per la modulazione del dolore.",
+          "TRATTAMENTO \u2014 Autogestione: educazione su posizioni di comfort e modifica delle attivit\u00E0 per limitare infiammazione e dolore.",
+          "TRATTAMENTO \u2014 Terapia manuale: mobilizzazioni articolari a BASSA intensit\u00E0, nei range accessori indolori e in posizioni gleno-omerali indolori.",
+          "TRATTAMENTO \u2014 Mobilit\u00E0: esercizi di ROM passivo indolore; esercizi di ROM attivo-assistito indolore.",
+          "\u2192 Il paziente ad alta irritabilit\u00E0 NON \u00E8 pronto per uno stress fisico significativo. Solo bassi livelli di esercizio gleno-omerale, incoraggiando il movimento nei distretti adiacenti.",
+          "\u2500\u2500\u2500 IRRITABILIT\u00C0 MODERATA \u2500\u2500\u2500",
+          "CARATTERISTICHE: dolore 4-6/10 | dolore notturno o a riposo INTERMITTENTE | livelli moderati di disabilit\u00E0 | il dolore compare AL fine corsa attivo o passivo | ROM attivo SIMILE al passivo.",
+          "TRATTAMENTO \u2014 Terapie fisiche: calore ed elettrostimolazione al bisogno.",
+          "TRATTAMENTO \u2014 Autogestione: educazione alla progressione delle attivit\u00E0 per guadagnare mobilit\u00E0 e funzione senza produrre infiammazione e dolore.",
+          "TRATTAMENTO \u2014 Terapia manuale: mobilizzazioni di MEDIA intensit\u00E0, progredendo ampiezza e durata dentro la resistenza tissutale senza generare infiammazione e dolore post-trattamento.",
+          "TRATTAMENTO \u2014 Stretching: da gentile a moderato, progredendo intensit\u00E0 e durata dentro la resistenza tissutale.",
+          "TRATTAMENTO \u2014 Rieducazione neuromuscolare: procedure per integrare i guadagni di mobilit\u00E0 nel normale movimento scapolo-omerale durante attivit\u00E0 di reaching.",
+          "\u2500\u2500\u2500 IRRITABILIT\u00C0 BASSA \u2500\u2500\u2500",
+          "CARATTERISTICHE: dolore \u22643/10 | NESSUN dolore notturno o a riposo | livelli minimi di disabilit\u00E0 | il dolore compare solo con SOVRAPPRESSIONE oltre il fine corsa passivo | ROM attivo UGUALE al passivo.",
+          "TRATTAMENTO \u2014 Autogestione: educazione alla progressione verso attivit\u00E0 funzionali e ricreative ad alta richiesta.",
+          "TRATTAMENTO \u2014 Terapia manuale: mobilizzazioni a FINE CORSA, alta ampiezza e lunga durata dentro la resistenza tissutale.",
+          "TRATTAMENTO \u2014 Stretching: progredendo la durata dentro la resistenza tissutale senza produrre infiammazione post-trattamento.",
+          "TRATTAMENTO \u2014 Rieducazione neuromuscolare: integrazione dei guadagni nel movimento durante le attivit\u00E0 funzionali e ricreative specifiche del paziente.",
+          "\u26A0\uFE0F Il livello di irritabilit\u00E0 e le priorit\u00E0 di trattamento CAMBIANO nel corso dell'episodio di cura: serve rivalutazione continua."
+        ]
+      },
+      {
+        title: "Diagnosi Differenziale \u2014 Criteri Rule In / Rule Out",
+        content: [
+          "\u2500\u2500\u2500 CAPSULITE ADESIVA \u2014 RULE IN \u2500\u2500\u2500",
+          "Et\u00E0 tra 40 e 65 anni",
+          "Esordio graduale e peggioramento progressivo di dolore e rigidit\u00E0",
+          "Dolore e rigidit\u00E0 limitano sonno, igiene personale, vestirsi e attivit\u00E0 di reaching",
+          "ROM PASSIVO gleno-omerale limitato in PI\u00D9 DIREZIONI, con la ROTAZIONE ESTERNA la pi\u00F9 limitata, in particolare in adduzione",
+          "La rotazione esterna o interna gleno-omerale DIMINUISCE man mano che l'omero viene abdotto da 45\u00B0 verso 90\u00B0",
+          "I movimenti passivi a fine corsa riproducono il dolore riferito dal paziente",
+          "Gli scivolamenti articolari e i movimenti accessori sono ristretti in TUTTE le direzioni",
+          "\u2500\u2500\u2500 CAPSULITE ADESIVA \u2014 RULE OUT \u2500\u2500\u2500",
+          "ROM passivo normale",
+          "Evidenza radiografica di artrosi gleno-omerale",
+          "La rotazione esterna o interna passiva AUMENTA man mano che l'omero viene abdotto da 45\u00B0 verso 90\u00B0 e il dolore \u00E8 riprodotto dalla provocazione palpatoria della miofascia del sottoscapolare",
+          "I test di tensione neurale dell'arto superiore riproducono i sintomi e il dolore aumenta o diminuisce modificando le posizioni di tensione nervosa",
+          "Il dolore \u00E8 riprodotto dalla provocazione palpatoria del sito di intrappolamento del nervo periferico",
+          "\u2500\u2500\u2500 CONFRONTO CON LE ALTRE DUE CONDIZIONI DI SPALLA \u2500\u2500\u2500",
+          "INSTABILIT\u00C0 (rule in): et\u00E0 sotto i 40 anni | storia di lussazione | movimenti accessori eccessivi in pi\u00F9 direzioni | apprensione a fine corsa di flessione, abduzione orizzontale e/o rotazione esterna.",
+          "CUFFIA DEI ROTATORI (rule in): sintomi sviluppati o peggiorati con attivit\u00E0 overhead ripetute o trauma acuto | sensazione di scatto o arco doloroso a met\u00E0 escursione (circa 90\u00B0) in elevazione attiva | i test resistivi ai muscoli della cuffia eseguiti a MET\u00C0 escursione riproducono il dolore | debolezza della cuffia.",
+          "\u26A0\uFE0F I test speciali come i segni di impingement e il test di Jobe NON aiutano a differenziare la capsulite dalla tendinopatia di cuffia, perch\u00E9 riproducono il dolore semplicemente portando a fine corsa un complesso capsulo-legamentoso dolente e rigido.",
+          "\u2500\u2500\u2500 PATTERN CAPSULARE \u2014 DA RIVEDERE \u2500\u2500\u2500",
+          "\u26A0\uFE0F Il pattern capsulare descritto da Cyriax (perdita di rotazione esterna proporzionalmente maggiore dell'abduzione, a sua volta pi\u00F9 limitata della rotazione interna) NON si riscontra in modo consistente quando si effettuano misurazioni oggettive.",
+          "Il pattern pi\u00F9 comune realmente osservato \u00E8: perdita di rotazione esterna a braccio al fianco, seguita da perdita di abduzione e rotazione interna. Un reperto costante \u00E8 invece la maggiore perdita di rotazione INTERNA rispetto all'esterna quando il braccio \u00E8 posizionato il pi\u00F9 vicino possibile a 90\u00B0 di abduzione frontale.",
+          "\u26A0\uFE0F Cyriax descriveva forza normale e risposte indolori ai test resistivi. Altri autori hanno invece documentato riduzione di forza al test isometrico, in particolare degli intrarotatori, degli elevatori e degli extrarotatori.",
+          "DEFINIZIONE OPERATIVA COMUNE: perdita di ROM superiore al 25% in almeno 2 piani e perdita di rotazione esterna passiva superiore al 50% rispetto alla spalla sana, oppure meno di 30\u00B0 di rotazione esterna."
+        ]
+      },
+      {
+        title: "Fattori di Rischio, Stadi e Decorso",
+        content: [
+          "\u2500\u2500\u2500 FATTORI DI RISCHIO (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO riconoscere che: (1) i pazienti con DIABETE MELLITO e MALATTIA TIROIDEA sono a rischio di sviluppare capsulite adesiva; (2) la capsulite \u00E8 pi\u00F9 prevalente tra i 40 e i 65 anni, nelle donne, e in chi ha gi\u00E0 avuto un episodio nel braccio controlaterale.",
+          "PREVALENZA: capsulite primaria dal 2% al 5.3% della popolazione generale; secondaria a diabete e tiroidopatia dal 4.3% al 38%.",
+          "DIABETE \u2014 DATI: prevalenza di diabete significativamente pi\u00F9 alta nei soggetti con capsulite idiopatica, sia donne (23.7% contro 4.7%) sia uomini (38.0% contro 6.5%). Risk ratio 5.9 negli uomini e 5.0 nelle donne.",
+          "TIROIDE: il 13.4% dei pazienti con capsulite presenta disfunzione tiroidea, quasi tutte donne (16 su 17). Risk ratio 7.3 nelle donne.",
+          "BILATERALIT\u00C0: avere la capsulite da un lato espone a un rischio del 5-34% di coinvolgimento controlaterale futuro; la forma bilaterale simultanea si verifica fino al 14% dei casi.",
+          "ALTRI FATTORI: immobilizzazione prolungata, infarto miocardico, trauma, malattia autoimmune. Associazione documentata anche con contrattura di Dupuytren.",
+          "\u2500\u2500\u2500 I QUATTRO STADI \u2500\u2500\u2500",
+          "STADIO 1 (fino a 3 mesi): dolore acuto a fine corsa, dolore sordo a riposo, disturbo del sonno. All'artroscopia reazione sinoviale diffusa SENZA aderenze n\u00E9 contrattura. \u26A0\uFE0F Spesso si sospetta erroneamente un impingement subacromiale, perch\u00E9 le restrizioni di ROM sono minime o assenti. La PERDITA PRECOCE DI ROTAZIONE ESTERNA con cuffia integra \u00E8 il segno distintivo e pu\u00F2 comparire gi\u00E0 in questo stadio.",
+          "STADIO 2 \u2014 'dolorosa' o 'freezing' (3-9 mesi): perdita graduale di movimento in tutte le direzioni a causa del dolore. All'artroscopia sinovite e angiogenesi aggressive con qualche perdita di movimento in anestesia.",
+          "STADIO 3 \u2014 'frozen' (9-15 mesi): dolore e perdita di movimento. La sinovite si riduce ma la fibrosi capsulo-legamentosa progressiva causa perdita della plica ascellare e del ROM anche in anestesia.",
+          "STADIO 4 \u2014 'thawing' (15-24 mesi): il dolore inizia a risolversi, ma persiste rigidit\u00E0 significativa. Le restrizioni di movimento possono persistere immodificate anche in anestesia.",
+          "\u2500\u2500\u2500 DECORSO (Grado C) \u2500\u2500\u2500",
+          "I clinici DEVONO riconoscere che la capsulite si presenta come un CONTINUUM caratterizzato da progressione stadiata di dolore e deficit di mobilit\u00E0, e che a 12-18 mesi possono persistere deficit di mobilit\u00E0 e dolore da lievi a moderati, sebbene molti pazienti riferiscano disabilit\u00E0 minima o assente.",
+          "\u26A0\uFE0F IL ROM NON CORRELA CON L'ESITO PERCEPITO: in pi\u00F9 studi il ROM residuo non correlava con i punteggi funzionali riferiti dal paziente, mentre il DOLORE con l'attivit\u00E0 s\u00EC. A 22 mesi il 90% dei pazienti era soddisfatto pur mostrando ancora deficit di mobilit\u00E0 rispetto al lato sano.",
+          "SUCCESSO TERAPEUTICO: non richiede il recupero del ROM completo. Si definisce come riduzione significativa del dolore, miglioramento della funzione ed elevata soddisfazione del paziente.",
+          "\u26A0\uFE0F Diabete e sesso maschile si associano a esiti peggiori di ROM. Una precedente riabilitazione e un contenzioso assicurativo in corso si associano invece al ricorso a manipolazione o release capsulare.",
+          "\u26A0\uFE0F SEGNALE DIAGNOSTICO: i pazienti che dopo infiltrazione, mobilizzazione o stretching recuperano il movimento in modo rapido e significativo probabilmente NON avevano una capsulite adesiva. A volte \u00E8 la risposta al trattamento a chiarire la diagnosi."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Raccomandazioni Graduate",
+        content: [
+          "\u2500\u2500\u2500 INFILTRAZIONI DI CORTICOSTEROIDI (Grado A \u2014 evidenza forte) \u2500\u2500\u2500",
+          "Le infiltrazioni intra-articolari di corticosteroidi COMBINATE con esercizi di mobilit\u00E0 e stretching sono pi\u00F9 efficaci nel fornire sollievo dal dolore a BREVE TERMINE (4-6 settimane) e miglioramento funzionale, rispetto ai soli esercizi di mobilit\u00E0 e stretching.",
+          "\u26A0\uFE0F LIMITE TEMPORALE: negli studi principali, a 6 mesi e a 12 mesi NON si osservano pi\u00F9 differenze tra i gruppi. Il vantaggio \u00E8 precoce, non duraturo.",
+          "IMPLICAZIONE FISIOPATOLOGICA: il fatto che tutti gli studi mostrino miglioramenti significativi di movimento IMMEDIATAMENTE dopo l'infiltrazione indica che la barriera iniziale al movimento \u00E8 il DOLORE e la difesa muscolare, non la fibrosi o le aderenze.",
+          "DOSE: uno studio in doppio cieco ha mostrato che il triamcinolone ad alta dose (40 mg) d\u00E0 risultati significativamente migliori della bassa dose (10 mg) su dolore, sonno e funzione.",
+          "SEDE: l'infiltrazione subacromiale \u00E8 risultata efficace quanto quella intra-articolare, con differenza significativa a favore dell'intra-articolare solo sul dolore a 3 settimane.",
+          "\u2500\u2500\u2500 EDUCAZIONE DEL PAZIENTE (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO fornire educazione che: (1) descriva il decorso naturale della malattia; (2) promuova la modifica delle attivit\u00E0 per incoraggiare un ROM funzionale e INDOLORE; (3) adegui l'intensit\u00E0 dello stretching al livello di irritabilit\u00E0 attuale del paziente.",
+          "\u26A0\uFE0F STUDIO CHIAVE \u2014 'SUPERVISED NEGLECT': confronto tra terapia aggressiva (esercizio e tecniche manuali FINO E OLTRE la soglia del dolore) e 'negligenza supervisionata' (spiegazione del decorso naturale, pendolari e stretching attivo ENTRO il range indolore). A 24 mesi l'89% del gruppo 'supervised neglect' raggiungeva un Constant score \u226580, contro il 64% del gruppo aggressivo.",
+          "\u2192 A 1 anno il divario era ancora pi\u00F9 netto: 64% contro NESSUN paziente del gruppo aggressivo. La terapia aggressiva pu\u00F2 essere dannosa, specialmente in fase infiammatoria.",
+          "\u2500\u2500\u2500 STRETCHING (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO istruire i pazienti in esercizi di stretching. L'INTENSIT\u00C0 va determinata dal livello di irritabilit\u00E0 tissutale del paziente.",
+          "\u26A0\uFE0F Non esiste evidenza che guidi frequenza, numero di ripetizioni o durata ottimali dello stretching. Lo stretching oltre i limiti del dolore pu\u00F2 dare esiti peggiori.",
+          "DATO SULLA COMPLIANCE: uno studio su 110 pazienti ha rilevato che la FREQUENZA delle sedute di mobilizzazione (2 volte a settimana, 1 volta, meno di 1) NON aveva relazione con il miglioramento del movimento, mentre il gruppo che eseguiva il programma domiciliare OGNI GIORNO otteneva risultati significativamente migliori e plateau pi\u00F9 rapido.",
+          "\u2500\u2500\u2500 MOBILIZZAZIONE ARTICOLARE (Grado C) \u2500\u2500\u2500",
+          "I clinici POSSONO usare procedure di mobilizzazione dirette principalmente all'articolazione gleno-omerale per ridurre il dolore e aumentare movimento e funzione.",
+          "ALTA CONTRO BASSA INTENSIT\u00C0: uno studio randomizzato su 100 pazienti ha confrontato mobilizzazioni di grado III-IV contro grado I-II senza esercizi. Entrambi i gruppi miglioravano significativamente nei primi 3 mesi; il gruppo ad alta intensit\u00E0 faceva meglio, ma solo una minoranza di confronti raggiungeva la significativit\u00E0 e la differenza complessiva era piccola.",
+          "\u2192 Le mobilizzazioni di grado I e II, che NON portano il tessuto a fine corsa, sono efficaci non solo sul dolore ma anche su ROM e funzione.",
+          "DIREZIONE: lo scivolamento POSTERIORE si \u00E8 dimostrato significativamente pi\u00F9 efficace di quello anteriore nel migliorare la rotazione esterna.",
+          "\u2500\u2500\u2500 TERAPIE FISICHE (Grado C) \u2500\u2500\u2500",
+          "I clinici POSSONO usare diatermia a onde corte, ultrasuoni o elettrostimolazione COMBINATI con esercizi di mobilit\u00E0 e stretching per ridurre il dolore e migliorare il ROM.",
+          "\u26A0\uFE0F In uno studio la diatermia a onde corte pi\u00F9 stretching dava miglioramenti di ROM significativamente maggiori, mentre tra calore superficiale pi\u00F9 stretching e solo stretching NON c'erano differenze.",
+          "\u2500\u2500\u2500 MANIPOLAZIONE TRASLAZIONALE (Grado C) \u2500\u2500\u2500",
+          "I clinici POSSONO usare la manipolazione traslazionale in anestesia diretta alla gleno-omerale nei pazienti che NON rispondono agli interventi conservativi.",
+          "TECNICA: eseguita a due operatori, uno stabilizza la scapola mentre l'altro esegue la manipolazione traslazionale. Scivolamento inferiore seguito da scivolamento posteriore, dopo blocco del plesso brachiale interscalenico.",
+          "\u2192 Alternativa alla manipolazione rotatoria standard, con minori rischi. In una serie, 6 pazienti su 8 hanno avuto un aumento immediato e significativo del ROM passivo in tutte le direzioni.",
+          "\u2500\u2500\u2500 MISURE DI ESITO (Grado A) \u2500\u2500\u2500",
+          "I clinici DEVONO usare misure funzionali validate: DASH, ASES o SPADI, prima e dopo gli interventi.",
+          "MDC E MCID: ASES \u2014 MDC 9.4 punti, MCID 6.4 | DASH \u2014 MDC 6.6-12.2 (media ponderata 10.5), MCID 10.2 | SPADI \u2014 MDC 18.0-18.1, MCID 8.0-13.1.",
+          "\u2192 Lo SPADI ha mostrato responsivit\u00E0 SUPERIORE al DASH specificamente nei pazienti con capsulite adesiva.",
+          "\u26A0\uFE0F Il Constant score NON \u00E8 raccomandato: con soli 4 item per la funzione riferita dal paziente, non \u00E8 chiaro se rappresenti in modo completo il costrutto dell'uso della spalla."
+        ]
+      }
+    ]
+  },
+  {
+    id: 30,
+    category: "Ginocchio",
+    color: "#0E6B5E",
+    icon: "\u{1F9B5}",
+    title: "Lesioni Legamentose di Ginocchio (LCA, LCP, LCM, LCL) \u2014 CPG Revisione 2017",
+    source: "Logerstedt et al. | JOSPT 2017;47(11):A1-A47 | Orthopaedic Section APTA",
+    pdfUrl: "https://www.orthopt.org/uploads/content_files/files/Knee%20Ligament%20Sprain%20CPG%20-%202017.pdf",
+    pdfUrl2: "https://www.orthopt.org/uploads/content_files/files/Knee%20Sprain%20Revision%20Decision%20Tree%20and%20Components(1).pdf",
+    tags: ["ginocchio", "LCA", "ACL", "LCP", "LCM", "legamenti", "hop test", "ritorno allo sport", "CPG"],
+    summary: "Revisione 2017 della CPG sulle lesioni legamentose di ginocchio: crociato anteriore e posteriore, collaterali e lesioni multilegamentose. Copre diagnosi, misure di esito, test di performance e interventi riabilitativi pre e post-ricostruzione, con particolare attenzione ai criteri e ai fattori psicologici del ritorno allo sport.",
+    sections: [
+      {
+        title: "Epidemiologia e Reinfortunio",
+        content: [
+          "INCIDENZA LCA: dal 0.01% al 0.05% della popolazione nazionale (mediana 0.03%), pari a 8-52 casi per 100.000 persone-anno. Tassi sostanzialmente pi\u00F9 alti nei militari e negli atleti professionisti.",
+          "MECCANISMO: circa il 70% delle lesioni di LCA \u00E8 da NON contatto. Nei dati NCAA il 60% nelle donne e il 59% negli uomini.",
+          "SESSO ED ET\u00C0: negli uomini l'incidenza massima \u00E8 tra i 19 e i 25 anni (241 per 100.000 persone-anno); nelle donne tra i 14 e i 18 anni (227.6 per 100.000).",
+          "SPORT SCOLASTICI, RISCHIO PER STAGIONE \u2014 ragazze: calcio 1.11%, basket 0.88%, lacrosse 0.53%. Ragazzi: football americano 0.80%, lacrosse 0.44%, calcio 0.30%.",
+          "COMPETIZIONE CONTRO ALLENAMENTO: rapporto di incidenza 7.3 in gara rispetto all'allenamento. Nelle ragazze 8.8, nei ragazzi 6.5.",
+          "\u2500\u2500\u2500 SECONDO INFORTUNIO DI LCA \u2014 DATO CENTRALE \u2500\u2500\u2500",
+          "Meta-analisi: tasso complessivo di secondo infortunio del 15% (8% al graft omolaterale, 7% al controlaterale). Sotto i 25 anni sale al 21%; negli atleti sotto i 25 anni che TORNANO allo sport arriva al 23%.",
+          "\u26A0\uFE0F Le atlete che tornano allo sport dopo ricostruzione hanno una probabilit\u00E0 4.5 volte maggiore di subire una nuova lesione di LCA entro 24 mesi rispetto ai controlli.",
+          "ET\u00C0 ALLA CHIRURGIA: chi aveva meno di 20 anni al primo intervento presenta un 29% di secondo infortunio a uno dei due ginocchi, con odds ratio 6.3 per la rottura del graft e 3.1 per il controlaterale.",
+          "\u26A0\uFE0F Il ritorno a sport ad alto rischio con cambi di direzione e perni aumenta di 3.9 volte le probabilit\u00E0 di rottura del graft e di 4.9 volte quelle di lesione controlaterale.",
+          "FOLLOW-UP LUNGO: a 5 o pi\u00F9 anni, rottura del graft omolaterale dall'1.8% al 10.4% (aggregato 5.8%) e lesione controlaterale dall'8.2% al 16.0% (aggregato 11.8%).",
+          "\u2500\u2500\u2500 FATTORI DI RISCHIO \u2014 SINTESI 2017 \u2500\u2500\u2500",
+          "ASSOCIATI AL RISCHIO: sesso femminile, gola intercondiloidea stretta, minore profondit\u00E0 di concavit\u00E0 del piatto tibiale mediale, maggiore lassit\u00E0 antero-posteriore tibio-femorale, precedente ricostruzione di LCA, predisposizione familiare.",
+          "ESTRINSECI: condizioni meteo asciutte e terreno sintetico rispetto all'erba naturale sono potenziali fattori di rischio per le lesioni da non contatto.",
+          "\u26A0\uFE0F Evidenza CONFLITTUALE sulla pendenza posteriore del piatto tibiale. Evidenza CARENTE sui fattori biomeccanici e neuromuscolari negli atleti maschi.",
+          "SPORT-SPECIFICO: il calcio rappresenta oltre un terzo delle ricostruzioni di LCA nei registri. Lo sci ha 1.13 volte la probabilit\u00E0 di lesione isolata di LCA, 2 volte quella di lesione di LCP e quasi 2 volte quella di lesioni di LCM e multilegamentose."
+        ]
+      },
+      {
+        title: "Diagnosi \u2014 Criteri Clinici per Legamento",
+        content: [
+          "\u2500\u2500\u2500 RACCOMANDAZIONE (Grado A) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO diagnosticare le categorie ICD di distorsione dei collaterali, dei crociati e di lesione di strutture multiple del ginocchio, usando: MECCANISMO DI LESIONE, LASSIT\u00C0 PASSIVA, DOLORE ARTICOLARE, VERSAMENTO e DEFICIT DI COORDINAZIONE DEL MOVIMENTO.",
+          "\u2500\u2500\u2500 LEGAMENTO CROCIATO ANTERIORE \u2500\u2500\u2500",
+          "Meccanismo: decelerazione e accelerazione con carico in valgo da non contatto, a ginocchio vicino all'estensione completa",
+          "Sensazione o rumore di 'pop' al momento del trauma",
+          "Emartro entro 0-12 ore dall'infortunio",
+          "Storia di cedimenti (giving way)",
+          "TEST DI LACHMAN positivo con end feel morbido: sensibilit\u00E0 85% (IC 95%: 83-87), specificit\u00E0 94% (92-95)",
+          "PIVOT SHIFT positivo: sensibilit\u00E0 24% (21-27), specificit\u00E0 98% (96-99)",
+          "\u2192 Rapporti di verosimiglianza aggiornati: Lachman LR+ 1.39-40.81 e LR\u2212 0.02-0.52 | cassetto anteriore LR+ 1.94-87.88 e LR\u2212 0.23-0.74 | pivot shift LR+ 4.37-16.42 e LR\u2212 0.38-0.84.",
+          "\u26A0\uFE0F AFFIDABILIT\u00C0: il Lachman ha affidabilit\u00E0 interrater da scarsa a eccellente (\u03BA 0.19-0.93) e intrarater da scarsa a moderata (\u03BA 0.29-0.51).",
+          "DEFICIT ASSOCIATI: 6-meter timed hop inferiore all'80% dell'arto sano; indice di forza isometrica massima del quadricipite inferiore all'80%; storia di cedimenti in 2 o pi\u00F9 attivit\u00E0 quotidiane.",
+          "\u2500\u2500\u2500 LEGAMENTO CROCIATO POSTERIORE \u2500\u2500\u2500",
+          "Meccanismo: forza posteriore sulla tibia prossimale (trauma da cruscotto, 38.5%), caduta sul ginocchio flesso con piede in flessione plantare (24.6%), iperestensione violenta improvvisa (11.9%)",
+          "Dolore posteriore localizzato inginocchiandosi o decelerando",
+          "CASSETTO POSTERIORE a 90\u00B0 positivo: sensibilit\u00E0 90%, specificit\u00E0 99%",
+          "POSTERIOR SAG (sublussazione posteriore della tibia prossimale): sensibilit\u00E0 79% (57-91), specificit\u00E0 100% (85-100)",
+          "\u2192 Il QUADRICEPS ACTIVE TEST \u00E8 il pi\u00F9 specifico (sensibilit\u00E0 0.53-0.98, specificit\u00E0 0.96-1.00, LR+ 11.97-98.44); il posterior sag sign il pi\u00F9 sensibile.",
+          "\u2500\u2500\u2500 LEGAMENTO COLLATERALE MEDIALE \u2500\u2500\u2500",
+          "Meccanismo: forza applicata alla faccia laterale dell'arto inferiore, tipicamente colpo diretto con piede a terra; oppure trauma rotazionale",
+          "Dolore mediale con stress in valgo a 30\u00B0 di flessione: sensibilit\u00E0 78% (64-92), specificit\u00E0 67% (57-76)",
+          "Aumentata apertura femoro-tibiale con stress in valgo a 30\u00B0: sensibilit\u00E0 91% (81-100), specificit\u00E0 49% (39-59)",
+          "Dolorabilit\u00E0 sul LCM e sulle sue inserzioni che riproduce il dolore familiare",
+          "\u2500\u2500\u2500 LEGAMENTO COLLATERALE LATERALE \u2500\u2500\u2500",
+          "Trauma in varo | tumefazione localizzata sul LCL | dolorabilit\u00E0 sul LCL e sulle inserzioni | dolore laterale e aumentata apertura con stress in varo a 0\u00B0 e 30\u00B0 di flessione",
+          "\u2500\u2500\u2500 IMAGING \u2500\u2500\u2500",
+          "OTTAWA KNEE RULE per decidere la radiografia: et\u00E0 \u226555 anni | dolorabilit\u00E0 isolata della rotula | dolorabilit\u00E0 della testa del perone | incapacit\u00E0 di flettere a 90\u00B0 | incapacit\u00E0 di caricare per 4 passi sia subito sia in pronto soccorso.",
+          "\u26A0\uFE0F L'esame clinico eseguito da clinici ben formati risulta accurato quanto la RM nella diagnosi di lesioni crociate o meniscali. La RM pu\u00F2 essere riservata ai casi pi\u00F9 complessi o dubbi e alla pianificazione preoperatoria."
+        ]
+      },
+      {
+        title: "Misure di Esito e Test di Performance",
+        content: [
+          "\u2500\u2500\u2500 MISURE RIFERITE DAL PAZIENTE (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO usare l'IKDC 2000 o il KOOS, e POSSONO usare la scala di Lysholm, come misure validate per sintomi e funzione.",
+          "I clinici DEVONO usare la TEGNER ACTIVITY SCALE o la MARX ACTIVITY RATING SCALE per valutare il livello di attivit\u00E0.",
+          "I clinici POSSONO usare l'ACL-RSI (Anterior Cruciate Ligament-Return to Sport after Injury) per valutare i fattori psicologici che possono ostacolare il ritorno allo sport.",
+          "IKDC O KOOS: l'IKDC 2000 \u00E8 risultato PI\u00D9 UTILE per soggetti giovani e attivi precocemente ed entro 1 anno dalla ricostruzione. Le sottoscale KOOS di dolore e ADL mostrano forti effetti soffitto, l'IKDC no.",
+          "\u26A0\uFE0F All'analisi di Rasch a 20 settimane dalla ricostruzione, solo le sottoscale KOOS 'sport e ricreazione' e 'qualit\u00E0 di vita' risultano adeguate; le sottoscale dolore, sintomi e ADL non valutano adeguatamente questi pazienti.",
+          "MDC: IKDC 2000 = 12.2 | sottoscale KOOS da 18.3 a 35.2 | Lysholm = 8.9 | Tegner = 1.",
+          "\u26A0\uFE0F DATO PROGNOSTICO: un punteggio KOOS-QoL inferiore a 44 a 2 anni dall'intervento comporta un rischio 3.7 volte maggiore di revisione. Per ogni calo di 10 punti nella KOOS-QoL il rischio di revisione aumenta del 33.6%.",
+          "\u2500\u2500\u2500 TEST DI PERFORMANCE (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO somministrare test clinici o sul campo appropriati, come i SINGLE-LEG HOP TEST: single hop for distance, crossover hop for distance, triple hop for distance e 6-meter timed hop.",
+          "SIMMETRIA ATTESA \u2014 hop test: 76-90% a 6 mesi | 88-95% a 12 mesi | 92-99% a 24 mesi dalla ricostruzione.",
+          "SIMMETRIA ATTESA \u2014 forza isocinetica degli estensori: 65-86% a 6 mesi | 84-91% a 12 mesi | 91-100% a 24 mesi. Flessori: 84-96% | 87-99% | 88-100%.",
+          "CUT-OFF PREDITTIVI: dopo lesione di LCA trattata conservativamente, un punteggio superiore all'88% al single hop for distance identifica con alta probabilit\u00E0 una funzione normale a 1 anno.",
+          "A 6 mesi dalla ricostruzione, chi ottiene meno dell'88% al 6-meter timed hop pu\u00F2 beneficiare di training mirato alla simmetria. Minime differenze al crossover hop a 6 mesi predicono funzione normale a 1 anno.",
+          "\u26A0\uFE0F I test preoperatori NON predicono gli esiti postoperatori.",
+          "\u2500\u2500\u2500 MISURE DI IMPAIRMENT (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO valutare lassit\u00E0 e stabilit\u00E0, coordinazione del movimento dell'arto inferiore, forza dei muscoli della coscia, versamento articolare e ROM.",
+          "QUADRICIPITE \u2014 CUT-OFF: oltre 6 mesi dalla ricostruzione, un picco di coppia del quadricipite superiore a 3.10 Nm/kg identifica con alta probabilit\u00E0 (odds 8.15) una funzione elevata (IKDC oltre 90%). Un indice di simmetria del quadricipite superiore al 96.5% d\u00E0 probabilit\u00E0 moderata (odds 2.78).",
+          "\u26A0\uFE0F I deficit PREOPERATORI di forza del quadricipite predicono una funzione peggiore a 6 mesi e a 2 anni dall'intervento. Un indice preoperatorio superiore al 70.2% predice con probabilit\u00E0 moderata un indice di almeno l'85% a 6 mesi.",
+          "ATTIVAZIONE DEL QUADRICIPITE: nei ginocchia con LCA deficitario l'attivazione media \u00E8 87.3% dal lato leso e 91.0% dal sano. La prevalenza di attivazione insufficiente (criterio 95%) \u00E8 del 57.1% dal lato leso, 34.2% dal sano e 21% BILATERALE.",
+          "GRAFT E FORZA: con graft osso-tendine rotuleo-osso il quadricipite \u00E8 pi\u00F9 debole del 7-9% e gli ischiocrurali pi\u00F9 forti dell'8-9% rispetto al graft da ischiocrurali. I deficit di forza del quadricipite possono persistere fino a 5 anni."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Raccomandazioni Graduate",
+        content: [
+          "\u2500\u2500\u2500 ESERCIZIO TERAPEUTICO (Grado A) \u2500\u2500\u2500",
+          "Esercizi CONCENTRICI ED ECCENTRICI, in carico e NON in carico, devono essere implementati entro 4-6 SETTIMANE, 2-3 VOLTE A SETTIMANA, per 6-10 MESI, per aumentare la forza dei muscoli della coscia e la performance funzionale dopo ricostruzione di LCA.",
+          "\u2192 Dosaggio esplicito e prolungato: sei-dieci mesi, non sei-dieci settimane.",
+          "\u2500\u2500\u2500 ELETTROSTIMOLAZIONE NEUROMUSCOLARE (Grado A) \u2500\u2500\u2500",
+          "La NMES DEVE essere usata per 6-8 SETTIMANE per potenziare gli esercizi di rinforzo dopo ricostruzione, per aumentare la forza del quadricipite e migliorare gli esiti funzionali a breve termine.",
+          "DATO: differenza media di 32.7 Nm nella forza isometrica del quadricipite a 6-8 settimane, a favore della NMES. Effect size da piccoli a molto grandi (0.08-3.81) in 10 confronti su 11.",
+          "\u26A0\uFE0F L'effetto su performance funzionale ed esiti riferiti dal paziente resta inconcludente.",
+          "\u2500\u2500\u2500 RIEDUCAZIONE NEUROMUSCOLARE (Grado A) \u2500\u2500\u2500",
+          "Il training di rieducazione neuromuscolare DEVE essere incorporato agli esercizi di rinforzo. L'evidenza indica che il training neuromuscolare che incorpora principi di apprendimento motorio va AGGIUNTO al rinforzo per ottimizzare gli esiti.",
+          "Gli interventi neuromuscolari sono efficaci anche nella gestione NON chirurgica della lesione di LCA, per funzione e stabilit\u00E0 articolare.",
+          "\u2500\u2500\u2500 MOBILIZZAZIONE IMMEDIATA (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO usare la mobilizzazione immediata (ENTRO 1 SETTIMANA) dopo ricostruzione, per aumentare il ROM, ridurre il dolore e ridurre il rischio di risposte avverse dei tessuti molli, come quelle associate alla perdita di estensione.",
+          "\u26A0\uFE0F NOTA 2017: il recupero precoce dell'estensione e il carico precoce sono ormai in uso da oltre 20 anni e costituiscono lo standard di cura dopo ricostruzione isolata di LCA. La riabilitazione 'accelerata' non \u00E8 pi\u00F9 una categoria separata.",
+          "\u2500\u2500\u2500 CRIOTERAPIA (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO usare la crioterapia immediatamente dopo la ricostruzione per ridurre il dolore postoperatorio. \u26A0\uFE0F L'evidenza \u00E8 insufficiente per edema, funzione, perdita ematica, degenza, ROM, uso di analgesici, soddisfazione e qualit\u00E0 di vita.",
+          "\u2500\u2500\u2500 RIABILITAZIONE SUPERVISIONATA (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO usare l'esercizio come parte del programma supervisionato in clinica, E devono fornire e supervisionare la progressione di un programma domiciliare, con educazione che ne assicuri l'esecuzione autonoma.",
+          "\u26A0\uFE0F CAUTELA: la revisione che confrontava domiciliare e supervisionato usava soprattutto ROM e questionari come esiti; l'unico studio con test di performance mostrava asimmetrie in ENTRAMBI i gruppi, e i punteggi Tegner medi (4-5) suggeriscono che i pazienti non fossero atleti competitivi n\u00E9 completamente riabilitati.",
+          "\u2500\u2500\u2500 CARICO PRECOCE E CPM (Grado C) \u2500\u2500\u2500",
+          "I clinici POSSONO implementare il carico precoce secondo tolleranza (entro 1 settimana dall'intervento).",
+          "I clinici POSSONO usare la mobilizzazione passiva continua nell'immediato postoperatorio per ridurre il dolore.",
+          "\u2500\u2500\u2500 TUTORI \u2500\u2500\u2500",
+          "(C) I clinici POSSONO usare tutori funzionali nei pazienti con INSUFFICIENZA di LCA (non operati).",
+          "\u26A0\uFE0F (D) DOPO RICOSTRUZIONE i clinici DEVONO raccogliere e documentare le PREFERENZE DEL PAZIENTE nella decisione sull'uso del tutore funzionale, poich\u00E9 esistono evidenze sia a favore sia contro.",
+          "\u2192 Nella revisione su 11 studi, il gruppo con tutore mostrava minore lassit\u00E0 in modo statisticamente significativo ma NON clinicamente rilevante; nessuna differenza di forza, ROM, dolore e funzione riferita.",
+          "(F) I clinici POSSONO usare tutori appropriati nelle lesioni acute di LCP, nelle lesioni severe di LCM e nelle lesioni dell'angolo postero-laterale."
+        ]
+      },
+      {
+        title: "Ritorno allo Sport e Fattori Psicologici",
+        content: [
+          "\u2500\u2500\u2500 TASSI DI RITORNO \u2500\u2500\u2500",
+          "Revisione sistematica su 7556 partecipanti: l'81% torna a QUALCHE livello di sport, il 65% torna al livello pre-infortunio, il 55% torna allo sport COMPETITIVO.",
+          "\u2192 Il divario tra 81% e 55% \u00E8 il dato su cui costruire le aspettative del paziente.",
+          "FATTORI CHE AUMENTANO LE PROBABILIT\u00C0: simmetria tra gli arti nella performance di hop, et\u00E0 pi\u00F9 giovane, sesso maschile e valutazione del rischio.",
+          "ALTRI FATTORI ASSOCIATI: maggiore forza del quadricipite postoperatoria, minore versamento, minor dolore, meno episodi di instabilit\u00E0, maggiore ROM in rotazione tibiale; minore chinesiofobia, maggiore fiducia atletica, maggiore autoefficacia e automotivazione preoperatorie.",
+          "\u2500\u2500\u2500 REGOLA CLINICA A 1 ANNO \u2500\u2500\u2500",
+          "Gli atleti SENZA versamento, SENZA instabilit\u00E0 e con IKDC 2000 superiore al 93% a 1 anno hanno oltre 14 volte pi\u00F9 probabilit\u00E0 di tornare allo sport (LR+ 14.54).",
+          "\u26A0\uFE0F Gli atleti che soddisfano SOLO UNO dei tre criteri hanno oltre 6 volte pi\u00F9 probabilit\u00E0 di NON tornare allo sport (LR\u2212 0.16).",
+          "\u2500\u2500\u2500 BATTERIA DI CRITERI \u2014 IL DATO PI\u00D9 SEVERO \u2500\u2500\u2500",
+          "Una batteria proposta definiva i criteri come: indici di simmetria isocinetici e agli hop test superiori al 90%, punteggio Landing Error Scoring System inferiore a 5, ACL-RSI superiore a 56, IKDC 2000 al 15\u00B0 percentile o superiore dei dati normativi per et\u00E0 e sesso.",
+          "\u26A0\uFE0F A 6 MESI DALLA RICOSTRUZIONE SOLO IL 7.1% DEI PAZIENTI SUPERAVA TUTTI I CRITERI.",
+          "\u2192 \u00C8 il dato che pi\u00F9 di ogni altro mette in discussione i tempi di rientro a sei mesi.",
+          "\u26A0\uFE0F I test di performance attuali, singoli o in batteria, NON hanno ancora dimostrato validit\u00E0 di costrutto o predittiva per autorizzare il ritorno allo sport a 1 anno dalla ricostruzione. Prima delle attivit\u00E0 ad alta richiesta possono essere raccomandate sessioni aggiuntive di riabilitazione intensiva.",
+          "\u2500\u2500\u2500 FATTORI PSICOLOGICI \u2500\u2500\u2500",
+          "Gli atleti che tornano allo sport avevano motivazione preoperatoria significativamente pi\u00F9 alta e risposta psicologica pi\u00F9 positiva di quelli che non tornano.",
+          "\u26A0\uFE0F Un locus of control interno basso, minore autoefficacia e sintomi depressivi PRIMA dell'intervento comportano esiti peggiori dopo la ricostruzione.",
+          "La PAURA aumenta significativamente quando si riprende la competizione, rispetto alla fase riabilitativa.",
+          "Chi non torna allo sport riferisce come motivi: sintomi persistenti al ginocchio (68%), paura di reinfortunio (52%), eventi di vita non correlati al ginocchio (29%).",
+          "\u26A0\uFE0F Paura del movimento e catastrofizzazione del dolore NON risultano associate alla funzione nella fase riabilitativa precoce. La TSK-11 pu\u00F2 essere ridotta a una scala a 3 item nella fase precoce (meno di 12 settimane), ma NON \u00E8 raccomandata oltre i 6 mesi.",
+          "Strategie di coping positive (rilassamento, imagery, training di autoefficacia, modeling) e buona aderenza si associano a recupero migliore. Gli interventi psicologici possono facilitare la riabilitazione.",
+          "\u2500\u2500\u2500 TIMING E TIPO DI CHIRURGIA \u2500\u2500\u2500",
+          "Nessuna differenza significativa tra chirurgia precoce e ritardata su lassit\u00E0, ROM, forza, esiti riferiti, ritorno allo sport o complicanze.",
+          "Un RCT che confrontava riabilitazione strutturata con ricostruzione precoce contro riabilitazione strutturata con opzione di ricostruzione successiva non ha trovato differenze a 2 e a 5 anni su esiti riferiti, livello di attivit\u00E0 o incidenza radiografica di artrosi.",
+          "Nessuna differenza sostanziale tra graft da quadricipite, ischiocrurali e osso-tendine rotuleo-osso su stabilit\u00E0 ed esiti riferiti."
+        ]
+      }
+    ]
+  },
+  {
+    id: 31,
+    category: "Ginocchio",
+    color: "#0E6B5E",
+    icon: "\u{1F9B4}",
+    title: "Lesioni Meniscali e Cartilaginee \u2014 CPG Revisione 2018",
+    source: "Logerstedt et al. | JOSPT 2018;48(2):A1-A50 | Orthopaedic Section APTA",
+    pdfUrl: "https://www.orthopt.org/uploads/content_files/files/Knee%20pain%20and%20mobility%20impairments%202018.pdf",
+    tags: ["ginocchio", "menisco", "cartilagine", "meniscectomia", "microfratture", "ACI", "MACI", "CPG"],
+    summary: "Revisione 2018 della CPG su lesioni meniscali e della cartilagine articolare. \u26A0\uFE0F Il documento \u00E8 orientato prevalentemente alla gestione POST-CHIRURGICA: gli autori dichiarano che la letteratura sul trattamento conservativo \u00E8 in rapida evoluzione e sar\u00E0 trattata nella prossima edizione. Copre diagnosi, misure di esito e interventi dopo meniscectomia, sutura meniscale e chirurgia cartilaginea.",
+    sections: [
+      {
+        title: "Epidemiologia e Decorso Clinico",
+        content: [
+          "MENISCO: seconda lesione pi\u00F9 comune del ginocchio, prevalenza 12-14%, incidenza 61 casi per 100.000 persone. Rappresenta quasi un quarto di tutte le lesioni di ginocchio.",
+          "Le lesioni meniscali si associano alla lesione di LCA dal 22% all'86% dei casi. Negli Stati Uniti il 10-20% di tutta la chirurgia ortopedica riguarda il menisco, circa 850.000 pazienti l'anno.",
+          "PATTERN PER ET\u00C0: i giovani attivi subiscono pi\u00F9 spesso lesioni TRAUMATICHE (longitudinali o radiali); gli anziani lesioni DEGENERATIVE (cleavage orizzontali, flap, lesioni complesse, macerazione).",
+          "Le lesioni del menisco LATERALE sono pi\u00F9 frequenti negli atleti sotto i 30 anni, quelle del MEDIALE sopra i 30.",
+          "SESSO: nelle scuole superiori le ragazze hanno un tasso di lesione meniscale superiore ai ragazzi (rate ratio 1.88).",
+          "CHIRURGIA PER ET\u00C0: la meniscectomia si concentra tra 45 e 64 anni, la sutura meniscale sotto i 35. Dal 2000 al 2011 in Danimarca le procedure meniscali annue sono raddoppiate, con aumento di 3 volte sopra i 55 anni.",
+          "CARTILAGINE: prevalenza di lesioni condrali all'artroscopia dal 60% al 70%. Nelle ginocchia degli atleti la prevalenza di lesioni focali a tutto spessore va dal 17% al 59%, e alcuni di questi atleti sono ASINTOMATICI.",
+          "\u26A0\uFE0F La prevalenza di lesioni condrali a tutto spessore in soggetti asintomatici \u00E8 del 14%, ma sale al 59% in cestisti e maratoneti.",
+          "\u2500\u2500\u2500 DECORSO DOPO MENISCECTOMIA \u2500\u2500\u2500",
+          "\u26A0\uFE0F FORZA DEL QUADRICIPITE: l'arto operato risulta dall'11% al 12% pi\u00F9 debole dei controlli GI\u00C0 PRIMA della meniscectomia e fino a 4 ANNI DOPO.",
+          "Deficit ampi nel primo mese post-operatorio, da piccoli a grandi da 1 a 6 mesi, piccoli oltre i 6 mesi.",
+          "PROPRIOCEZIONE: rimane compromessa a 3 mesi dalla meniscectomia rispetto al ginocchio controlaterale sano e ai controlli, nonostante il miglioramento della funzione percepita.",
+          "A 4 anni dalla meniscectomia la sottoscala KOOS di qualit\u00E0 di vita resta inferiore ai controlli sani (78.7 contro 90.0), mentre le altre quattro sottoscale non mostrano differenze.",
+          "\u2500\u2500\u2500 DATO CHIAVE: CHIRURGIA CONTRO ESERCIZIO \u2500\u2500\u2500",
+          "\u26A0\uFE0F Una revisione sistematica sull'artroscopia per lesioni meniscali DEGENERATIVE riporta un miglioramento minimo a breve termine a favore della chirurgia sul dolore, che risulta ASSENTE a 1-2 anni. Sono inoltre associati danni: trombosi venosa profonda sintomatica, embolia polmonare, infezione e morte.",
+          "RCT su 351 pazienti con lesione meniscale e artrosi lieve-moderata randomizzati a meniscectomia pi\u00F9 riabilitazione oppure a sola riabilitazione: risultati SIMILI a 6 e 12 mesi. WOMAC a 6 mesi migliorato di 20.9 punti nel gruppo chirurgico contro 18.5 nel riabilitativo; a 12 mesi 23.5 contro 22.8.",
+          "\u2192 A 6 mesi il 30% dei pazienti assegnati alla riabilitazione \u00E8 passato alla chirurgia, mentre il 5% degli assegnati alla chirurgia ha scelto di non operarsi.",
+          "SINTESI DEGLI AUTORI: i pazienti trattati conservativamente per lesione meniscale hanno esiti da simili a MIGLIORI in termini di forza e funzione percepita, a breve e medio termine, rispetto a chi \u00E8 stato sottoposto a meniscectomia."
+        ]
+      },
+      {
+        title: "Diagnosi e Test Clinici",
+        content: [
+          "\u2500\u2500\u2500 CRITERI PER LESIONE MENISCALE \u2500\u2500\u2500",
+          "Trauma torsionale | sensazione di lacerazione al momento del trauma | versamento RITARDATO (6-24 ore) | storia di catching o locking | dolore con iperestensione forzata | dolore con massima flessione passiva",
+          "MANOVRA DI McMURRAY: sensibilit\u00E0 55% (IC 95%: 50-60), specificit\u00E0 77% (62-87). Menisco mediale 50% e 77%; laterale 21% e 94%.",
+          "DOLORABILIT\u00C0 SULLA RIMA ARTICOLARE: sensibilit\u00E0 76% (73-80), specificit\u00E0 77% (64-87). Mediale 83% e 76%; laterale 68% e 97%.",
+          "TEST DI THESSALY a 20\u00B0 di flessione: sensibilit\u00E0 59-89% (mediale) e 67-92% (laterale); specificit\u00E0 83-97% e 95-96%.",
+          "\u2500\u2500\u2500 MENISCAL PATHOLOGY COMPOSITE SCORE \u2500\u2500\u2500",
+          "Combinazione di: storia di catching o locking, dolore con iperestensione forzata, dolore con massima flessione passiva, dolorabilit\u00E0 sulla rima e dolore o click al McMurray.",
+          "Oltre 5 reperti positivi: sensibilit\u00E0 11.2%, specificit\u00E0 99.0%",
+          "Oltre 3 reperti positivi: sensibilit\u00E0 30.8%, specificit\u00E0 90.2%",
+          "Oltre 1 reperto positivo: sensibilit\u00E0 76.6%, specificit\u00E0 43.1%",
+          "\u2192 SINTESI 2018: dolore al ginocchio, meccanismo torsionale, catching o locking, versamento ritardato e Composite Score con OLTRE 3 reperti positivi permettono di classificare il paziente nella categoria di lesione meniscale.",
+          "\u2500\u2500\u2500 ATTENZIONE ALL'AFFIDABILIT\u00C0 DEI TEST \u2500\u2500\u2500",
+          "\u26A0\uFE0F Nella pratica di medicina generale, confrontati con la RM, i test mostrano accuratezza da scarsa a discreta: McMurray sensibilit\u00E0 0.58 e specificit\u00E0 0.56 | Thessaly 0.66 e 0.39 | Apley 0.53 e 0.53 | dolorabilit\u00E0 di rima 0.77 e 0.26.",
+          "\u26A0\uFE0F AFFIDABILIT\u00C0 INTERRATER: Thessaly \u03BA 0.54 (discreta), deep squat \u03BA 0.46, McMurray e dolorabilit\u00E0 di rima \u03BA \u22640.38 (scarsa); in uno studio la dolorabilit\u00E0 di rima ha \u03BA 0.17.",
+          "\u26A0\uFE0F La SEDE DEL DOLORE riferito dal paziente NON correla con la sede della lesione meniscale.",
+          "\u2500\u2500\u2500 CRITERI PER LESIONE CARTILAGINEA \u2500\u2500\u2500",
+          "Trauma acuto con emartro (0-2 ore, associato a frattura osteocondrale) | esordio insidioso aggravato da impatto ripetitivo | dolore e gonfiore intermittenti | storia di catching o locking | dolorabilit\u00E0 sulla rima articolare",
+          "\u26A0\uFE0F La diagnosi di lesione cartilaginea si formula con un livello di certezza BASSO sulla base dei soli reperti clinici.",
+          "\u2500\u2500\u2500 IMAGING \u2500\u2500\u2500",
+          "OTTAWA KNEE RULE: sensibilit\u00E0 0.99, specificit\u00E0 0.49. Criteri: et\u00E0 \u226555 anni | dolorabilit\u00E0 isolata della rotula | dolorabilit\u00E0 della testa del perone | incapacit\u00E0 di flettere a 90\u00B0 | incapacit\u00E0 di caricare per 4 passi.",
+          "L'esame clinico da parte di clinici ben formati risulta accurato quanto la RM per la diagnosi di lesioni meniscali. Soglia di sospetto pi\u00F9 bassa nei pazienti di mezza et\u00E0 e anziani."
+        ]
+      },
+      {
+        title: "Fattori di Rischio e Artrosi Post-Meniscectomia",
+        content: [
+          "\u2500\u2500\u2500 LESIONI MENISCALI DEGENERATIVE \u2500\u2500\u2500",
+          "Evidenza FORTE per: et\u00E0 oltre 60 anni (OR 2.32) | sesso maschile (OR 2.98) | lavoro in ginocchio o accovacciato (OR 2.69) | salire pi\u00F9 di 30 rampe di scale al giorno (OR 2.28).",
+          "\u2500\u2500\u2500 LESIONI MENISCALI ACUTE \u2500\u2500\u2500",
+          "Fattori di rischio forti: praticare CALCIO (OR 3.58) e RUGBY (OR 2.84).",
+          "\u26A0\uFE0F RICOSTRUZIONE DI LCA RITARDATA: fattore di rischio forte per future lesioni del menisco mediale (OR 3.50). Ogni mese di ritardo aumenta in media dello 0.6% le lesioni associate.",
+          "Un ritardo di 12 mesi aumenta le probabilit\u00E0 di lesione del menisco mediale (OR 1.81), di lesione cartilaginea del condilo femorale mediale (OR 2.35) e del piatto tibiale mediale (OR 5.57).",
+          "\u2500\u2500\u2500 ARTROSI DOPO MENISCECTOMIA \u2500\u2500\u2500",
+          "\u26A0\uFE0F Prevalenza media di artrosi di ginocchio dopo meniscectomia del 53.5% (range 16-92.9%).",
+          "Evidenza FORTE che meniscectomia mediale e laterale e durata dei sintomi preoperatori si associno all'artrosi. Evidenza consistente che l'ESTENSIONE della meniscectomia sia associata all'artrosi.",
+          "L'incidenza di artrosi \u00E8 pi\u00F9 alta dopo meniscectomia per lesioni DEGENERATIVE rispetto a quelle traumatiche.",
+          "A 8 o pi\u00F9 anni dalla meniscectomia parziale: risultati clinici normali o quasi normali nell'80-100% dei pazienti, ma evidenza radiografica di degenerazione articolare fino al 60%.",
+          "\u26A0\uFE0F DATO INDIPENDENTE DALLA CHIRURGIA: qualsiasi storia di lesione meniscale, traumatica o degenerativa, indipendentemente dalla meniscectomia e corretta per demografia, attivit\u00E0 fisica e allineamento, \u00E8 altamente predittiva (OR 5.7) di sviluppo di artrosi tibio-femorale radiografica.",
+          "\u2500\u2500\u2500 SUTURA CONTRO MENISCECTOMIA \u2500\u2500\u2500",
+          "A 5-8 anni da lesione traumatica isolata del menisco mediale, la progressione dell'artrosi era del 40% nel gruppo meniscectomia contro il 20% nel gruppo sutura.",
+          "\u26A0\uFE0F RITORNO AL LIVELLO PRE-INFORTUNIO: 95% dopo sutura meniscale contro 50% dopo meniscectomia.",
+          "I pazienti con sutura riportano funzione percepita da simile a migliore, punteggi Lysholm pi\u00F9 alti (differenza media 5.24) e minore perdita di attivit\u00E0.",
+          "\u2500\u2500\u2500 TEMPI DI RITORNO ALLO SPORT DOPO MENISCECTOMIA \u2500\u2500\u2500",
+          "Atleti sotto i 30 anni: in media 54 giorni | sopra i 30: 89 giorni",
+          "Lesione del menisco mediale: 79 giorni | laterale: 61 giorni",
+          "Atleti d'\u00E9lite e competitivi: 53-54 giorni | ricreativi: 88 giorni",
+          "\u2500\u2500\u2500 CHIRURGIA CARTILAGINEA \u2014 ESITI \u2500\u2500\u2500",
+          "RITORNO ALLO SPORT: 78% complessivo. Per procedura: 75% dopo microfratture, 84-86% dopo ACI, 88-89% dopo trasferimento osteocondrale (OCT).",
+          "TEMPI: media 11.2 mesi complessivi. Microfratture 8.6 mesi | ACI 16.0 mesi | OCT 7.1-9.6 mesi.",
+          "\u26A0\uFE0F Al follow-up a 10 anni, il 75% degli atleti con OCT manteneva lo stesso livello sportivo, contro il 37% dopo microfratture.",
+          "MICROFRATTURE: appropriate con buoni esiti per lesioni PICCOLE (meno di 5 cm\u00B2) e ritorno ad attivit\u00E0 a bassa richiesta. Chi ha lesioni piccole ma torna ad attivit\u00E0 ad alta richiesta ha un tasso di fallimento progressivamente maggiore.",
+          "ACI: tasso di fallimento complessivo del 5.8%, ma il 33.3% richiede un reintervento, con tempo medio di 21.6 mesi."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Raccomandazioni Graduate",
+        content: [
+          "\u26A0\uFE0F Le raccomandazioni riguardano prevalentemente la gestione POST-CHIRURGICA.",
+          "\u2500\u2500\u2500 ESERCIZIO TERAPEUTICO (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO fornire esercizi supervisionati e progressivi di ROM, rinforzo progressivo dei muscoli del GINOCCHIO E DELL'ANCA, e training neuromuscolare, ai pazienti con lesioni meniscali e cartilaginee e dopo chirurgia meniscale o cartilaginea.",
+          "DATI A SUPPORTO: in due RCT su lesioni meniscali degenerative, 12 settimane di terapia con esercizio specializzato hanno prodotto miglioramenti significativamente maggiori di dolore (VAS 1.9 contro 0.6), forza (picco di coppia del quadricipite 38.1 Nm contro 10.4) e KOOS (18.0 punti contro 6.5) rispetto a nessuna terapia, mantenuti a 12 mesi.",
+          "\u26A0\uFE0F DATO SULL'IMPEGNO RIABILITATIVO: dopo chirurgia cartilaginea, i pazienti con bassi livelli di attivit\u00E0 nelle modalit\u00E0 a basso carico (meno di 12 minuti al giorno di ROM, rinforzo non in carico, propriocezione) avevano esiti PEGGIORI di forza del quadricipite e hop monopodalico rispetto a chi superava i 12 minuti al giorno.",
+          "\u2500\u2500\u2500 RIABILITAZIONE SUPERVISIONATA (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO usare l'esercizio come parte del programma supervisionato in clinica dopo meniscectomia artroscopica, E fornire e supervisionare la progressione di un programma domiciliare con educazione all'esecuzione autonoma.",
+          "\u2192 Le revisioni mostrano differenze a favore del supervisionato nelle misure di PERFORMANCE (salto verticale 22.5 contro 20.1 cm; hop monopodalico 113.8 contro 94.7 cm) ma NON nelle misure riferite dal paziente.",
+          "\u26A0\uFE0F I punteggi medi di entrambi i gruppi risultavano inferiori alle norme di popolazione, il che suggerisce che i pazienti non fossero completamente riabilitati.",
+          "\u2500\u2500\u2500 ELETTROSTIMOLAZIONE E BIOFEEDBACK (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO fornire stimolazione e rieducazione neuromuscolare dopo procedure meniscali per aumentare forza del quadricipite, performance funzionale e funzione del ginocchio.",
+          "\u2500\u2500\u2500 MOBILIT\u00C0 PROGRESSIVA (Grado B) \u2500\u2500\u2500",
+          "I clinici POSSONO usare mobilit\u00E0 attiva e passiva precoce e progressiva dopo chirurgia meniscale e cartilaginea.",
+          "\u26A0\uFE0F Sulla mobilizzazione passiva continua dopo chirurgia cartilaginea, la revisione non ha rilevato migliori esiti istologici alla biopsia artroscopica di controllo n\u00E9 migliori reperti radiografici oltre 1 anno.",
+          "\u2500\u2500\u2500 CARICO PROGRESSIVO \u2500\u2500\u2500",
+          "(C) I clinici POSSONO considerare il carico precoce e progressivo nei pazienti con SUTURA meniscale.",
+          "(B) I clinici DEVONO usare una progressione a tappe del carico per raggiungere il CARICO COMPLETO ENTRO 6-8 SETTIMANE dopo MACI per lesioni cartilaginee.",
+          "\u2192 Negli RCT il gruppo con carico accelerato (completo a 6-8 settimane) otteneva punteggi KOOS migliori rispetto allo standard (completo a 11 settimane), CON PARI guarigione del tessuto di innesto e nessuna delaminazione completa.",
+          "\u2500\u2500\u2500 RITORNO ALL'ATTIVIT\u00C0 \u2500\u2500\u2500",
+          "(C) I clinici POSSONO utilizzare un ritorno all'attivit\u00E0 precoce e progressivo dopo SUTURA meniscale.",
+          "(E) I clinici POSSONO aver bisogno di RITARDARE il ritorno all'attivit\u00E0 a seconda del TIPO di chirurgia cartilaginea.",
+          "\u2500\u2500\u2500 MISURE DI ESITO \u2500\u2500\u2500",
+          "(B) Per gli esiti specifici del ginocchio i clinici DEVONO usare l'IKDC 2000 o il KOOS, e POSSONO usare la scala di Lysholm \u2014 con RIMOZIONE dell'item sul gonfiore e usando punteggi non pesati.",
+          "(C) I clinici POSSONO usare Tegner o Marx per il livello di attivit\u00E0, ma queste hanno minore supporto sulle propriet\u00E0 di misura. SF-36 o EQ-5D sono misure generali appropriate; la KQoL-26 per la qualit\u00E0 di vita legata al ginocchio.",
+          "(B) MENISCO \u2014 i clinici DEVONO valutare al basale e almeno a un altro momento: modified stroke test per il versamento, ROM attivo, forza isometrica o isocinetica massima del quadricipite, iperestensione forzata, massima flessione passiva, manovra di McMurray e dolorabilit\u00E0 di rima.",
+          "(D) CARTILAGINE \u2014 evidenza conflittuale: i clinici POSSONO valutare modified stroke test, ROM attivo, forza massima del quadricipite e dolorabilit\u00E0 di rima.",
+          "(C) TEST DI PERFORMANCE: nella fase precoce 30-second chair-stand test, stair-climb test, timed up-and-go e 6-minute walk test; per il ritorno all'attivit\u00E0 i single-leg hop test."
+        ]
+      }
+    ]
+  },
+  {
+    id: 32,
+    category: "Anca",
+    color: "#1B4F8A",
+    icon: "\u{1F9B5}",
+    title: "Dolore d'Anca Non Artrosico (FAIS, Labbro, Displasia) \u2014 CPG Revisione 2023",
+    source: "Enseki et al. | JOSPT 2023;53(7):CPG1-CPG70 | Academy of Orthopaedic Physical Therapy + AASPT",
+    pdfUrl: "https://ifspt.org/wp-content/uploads/2025/05/Hip-Pain-compressed.pdf",
+    pdfUrl2: "https://www.jospt.org/doi/10.2519/jospt.2023.0302",
+    tags: ["anca", "FAI", "FAIS", "labbro acetabolare", "displasia", "instabilit\u00E0", "cam", "pincer", "CPG"],
+    summary: "Revisione 2023 della CPG sul dolore d'anca non artrosico: sindrome da conflitto femoro-acetabolare (FAIS), displasia acetabolare, instabilit\u00E0 e microinstabilit\u00E0, lesioni del labbro, lesioni osteocondrali, corpi liberi e lesioni del legamento rotondo. Sostituisce la versione 2014 e riguarda la gestione NON operatoria; la riabilitazione post-operatoria \u00E8 fuori dallo scopo del documento.",
+    sections: [
+      {
+        title: "Morfologia, FAIS e Instabilit\u00E0",
+        content: [
+          "\u26A0\uFE0F DISTINZIONE TERMINOLOGICA FONDAMENTALE: 'FAI' descrive la VARIAZIONE MORFOLOGICA di acetabolo e/o femore che causa contatto precoce durante il movimento. 'FAIS' \u00E8 il DISTURBO CLINICO, che richiede sintomi, segni clinici positivi E reperti di imaging.",
+          "\u26A0\uFE0F I reperti di imaging di FAI sono COMUNI nella popolazione generale: dal 9% al 25% dei maschi asintomatici e dal 2% al 10% delle femmine asintomatiche. Diagnosi e trattamento devono quindi fondarsi sui sintomi, non sull'immagine.",
+          "MORFOLOGIA CAM: deriva probabilmente da alterazioni dell'epifisi femorale prossimale secondarie al carico sportivo ripetitivo durante l'ADOLESCENZA. Alta prevalenza nei maschi giovani attivi in sport ad alto impatto \u2014 hockey, calcio, football.",
+          "MORFOLOGIA PINCER: associata a sovracopertura acetabolare globale (retroversione, protrusio, coxa profunda) o focale della parete antero-superiore. Pi\u00F9 comunemente riportata in donne attive di mezza et\u00E0.",
+          "GENETICA: i fratelli di soggetti con morfologia cam hanno un rischio 2.8 volte maggiore di presentarla; per la pincer il rischio relativo \u00E8 2.0.",
+          "\u2500\u2500\u2500 MISURE RADIOGRAFICHE \u2500\u2500\u2500",
+          "ANGOLO CENTRO-BORDO LATERALE (LCEA) di Wiberg: normale tra 25\u00B0 e 39\u00B0. Sotto 25\u00B0 indica sottocopertura laterale; sopra 39\u00B0 sovracopertura.",
+          "ANGOLO ALFA: valori superiori a 60\u00B0 suggestivi di morfologia cam.",
+          "\u2500\u2500\u2500 RISCHIO DI ARTROSI \u2500\u2500\u2500",
+          "Le anche con LCEA inferiore a 25\u00B0 hanno 2.3 volte pi\u00F9 probabilit\u00E0 di sviluppare artrosi rispetto a quelle con LCEA \u226525\u00B0.",
+          "Le anche con angolo alfa superiore a 60\u00B0 hanno 2.5 volte pi\u00F9 probabilit\u00E0 di sviluppare artrosi. Le anche che sviluppano artrosi avevano un angolo alfa maggiore di 16.1\u00B0.",
+          "\u26A0\uFE0F Nelle donne, ogni riduzione di 1\u00B0 dell'LCEA sotto i 28\u00B0 aumenta del 13% il rischio di artrosi radiografica e del 18% quello di protesi totale d'anca.",
+          "\u26A0\uFE0F L'associazione tra morfologia PINCER e artrosi \u00E8 descritta negli studi trasversali ma NON confermata dagli studi prospettici.",
+          "\u2500\u2500\u2500 VERSIONE FEMORALE \u2500\u2500\u2500",
+          "Anteversione eccessiva: aumento della rotazione interna e riduzione della esterna. Pu\u00F2 aumentare il rischio di instabilit\u00E0 stressando la capsula anteriore.",
+          "Retroversione (ridotta anteversione): aumento della rotazione esterna e riduzione della interna. Aumenta il rischio di conflitto anteriore riducendo lo spazio femoro-acetabolare in flessione e ancor pi\u00F9 in flessione con rotazione interna, con maggior rischio di lesione labrale e di artrosi tardiva.",
+          "\u2500\u2500\u2500 MICROINSTABILIT\u00C0 \u2500\u2500\u2500",
+          "Movimento extra-fisiologico dell'articolazione con dolore e limitazioni funzionali. Il legamento ileo-femorale \u00E8 il vincolo primario alla rotazione esterna e alla traslazione anteriore della testa femorale.",
+          "Presente pi\u00F9 comunemente in chi esegue movimenti rotatori ripetuti dell'anca sotto carico assiale. Attivit\u00E0 a rischio: danza, ginnastica, golf, tennis.",
+          "\u26A0\uFE0F L'instabilit\u00E0 iatrogena pu\u00F2 verificarsi dopo artroscopia con capsulotomia chirurgica dei legamenti di supporto.",
+          "Predisposizione genetica: sindrome di Ehlers-Danlos o sindrome da ipermobilit\u00E0 benigna."
+        ]
+      },
+      {
+        title: "Diagnosi \u2014 Cosa Dicono Davvero i Test",
+        content: [
+          "\u2500\u2500\u2500 RACCOMANDAZIONE 2023 (Grado C) \u2500\u2500\u2500",
+          "I clinici POSSONO usare FADIR e FABER durante la valutazione clinica per identificare chi NON HA la FAIS quando questi test sono negativi.",
+          "\u26A0\uFE0F FORMULAZIONE DELIBERATA: i test servono a ESCLUDERE, non a confermare. La capacit\u00E0 di diagnosticare accuratamente la FAIS con i test clinici \u00E8 limitata.",
+          "ACCURATEZZA DIAGNOSTICA \u2014 range tra gli studi:",
+          "FADIR: sensibilit\u00E0 0.08-1.00, specificit\u00E0 0.03-1.00 (19 studi)",
+          "FABER: sensibilit\u00E0 0.41-0.98, specificit\u00E0 0.18-1.00 (8 studi)",
+          "Straight-leg raise resistito (Stinchfield): sensibilit\u00E0 0.06-0.75, specificit\u00E0 0.29-1.00",
+          "Conflitto posteriore: sensibilit\u00E0 0.18-0.21",
+          "Scour: sensibilit\u00E0 0.50-0.88, specificit\u00E0 0.29-0.43",
+          "Rotazione interna con sovrappressione: sensibilit\u00E0 0.8-1.0, specificit\u00E0 0.15-0.18",
+          "Log roll: sensibilit\u00E0 0.30 | Squat massimo: 0.75 e 0.41 | Foot progression angle nel cammino: 0.61 e 0.56",
+          "\u2192 MIGLIOR CRITERIO PER ESCLUDERE: FADIR indolore E nessuna restrizione di ROM al FABER rispetto al lato sano.",
+          "\u26A0\uFE0F Il FADIR NON differenzia tra morfologia cam e pincer.",
+          "\u2500\u2500\u2500 LEGAMENTO ROTONDO (Grado C) \u2500\u2500\u2500",
+          "I clinici POSSONO includere il test del legamento rotondo per identificare chi ha e chi non ha una lesione.",
+          "ESECUZIONE: positivo quando il dolore \u00E8 riprodotto a fine corsa di rotazione interna e/o esterna con anca a 70\u00B0 di flessione e 30\u00B0 sotto la massima abduzione. Sensibilit\u00E0 0.09, specificit\u00E0 0.85, valore predittivo negativo 91%, positivo 84%.",
+          "\u2500\u2500\u2500 TEST PER LA MICROINSTABILIT\u00C0 \u2500\u2500\u2500",
+          "Abduzione-iperestensione-rotazione esterna, prone instability e iperestensione-rotazione esterna predicono la microinstabilit\u00E0 confermata artroscopicamente nell'86.3-90.9% dei casi quando UNO qualsiasi dei tre risulta positivo.",
+          "\u26A0\uFE0F Un test negativo NON esclude l'instabilit\u00E0: solo l'abduzione-iperestensione-rotazione esterna supera il 75% di valore predittivo negativo.",
+          "Il prone apprehension relocation test ha eccellente affidabilit\u00E0 tra operatori (\u03BA 0.81).",
+          "PRESENTAZIONE TIPICA della microinstabilit\u00E0: storia di dolore anteriore d'anca, dolore in estensione e rotazione esterna all'esame.",
+          "\u2500\u2500\u2500 IMAGING \u2500\u2500\u2500",
+          "Radiografia di anca e bacino come scelta iniziale sia nel dolore acuto sia cronico. La proiezione antero-posteriore \u00E8 la pi\u00F9 utile per valutare sovra e sottocopertura.",
+          "RM con artrografia o RM senza contrasto identificano entrambe accuratamente le lesioni labrali; l'artro-RM valuta meglio volume capsulare e delaminazione condrale.",
+          "\u26A0\uFE0F Spesso i reperti di imaging sono INCIDENTALI e incidono sulla gestione solo nella misura in cui forniscono educazione e rassicurazione al paziente.",
+          "\u2500\u2500\u2500 DIAGNOSI DIFFERENZIALE \u2500\u2500\u2500",
+          "Patologia lombosacrale | intrappolamento nervoso (cutaneo laterale della coscia, otturatorio) | artrosi d'anca | tendinite o borsite dell'ileopsoas | stiramento degli adduttori | stiramento dell'otturatore interno | ernia inguinale | pubalgia dell'atleta | osteonecrosi della testa femorale | frattura da stress prossimale di femore o pelvica | avulsione del sartorio o del retto femorale | miosite ossificante | neoplasia | malattia di Legg-Calv\u00E9-Perthes | epifisiolisi | osteomielite | ascesso dello psoas | artrite settica | artrite reumatoide | prostatite | disturbi urogenitali"
+        ]
+      },
+      {
+        title: "Esame \u2014 Deficit Misurabili",
+        content: [
+          "\u2500\u2500\u2500 MISURE RIFERITE DAL PAZIENTE (Grado A) \u2500\u2500\u2500",
+          "I clinici DEVONO continuare a usare iHOT, HAGOS, HOS-ADL e/o HOS-SRA al basale e ad almeno un altro momento, inclusa la dimissione.",
+          "MDC (cambiamento minimo rilevabile): iHOT-33 = 15.6 | HOS-ADL = 17.8 | HOS-SRA = 28.9 | HAGOS 15.3-22.3.",
+          "(C) I clinici POSSONO usare uno strumento per valutare DEPRESSIONE, ANSIA, BASSA AUTOEFFICACIA e CHINESIOFOBIA al basale e alla dimissione.",
+          "\u2192 La funzione riferita (iHOT-12) risulta associata al Pain Self-Efficacy Questionnaire (rho 0.71) e alla Tampa Scale of Kinesiophobia (rho \u22120.56). Chi riferisce depressione o ansia ottiene punteggi peggiori a Pain Catastrophizing (27.1 contro 16.3) e Tampa (45.6 contro 41.4).",
+          "\u2500\u2500\u2500 ROM E FORZA (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO valutare ROM e FORZA per rotazione interna, rotazione esterna, flessione, estensione, abduzione e adduzione, al basale e ad almeno un altro momento.",
+          "DEFICIT DI ROM NELLA FAIS \u2014 atleti maschi contro asintomatici: flessione 112\u00B0 contro 117\u00B0 | abduzione 33\u00B0 contro 44\u00B0 | ROTAZIONE INTERNA 33\u00B0 contro 53\u00B0.",
+          "\u26A0\uFE0F CUT-OFF UTILE: una rotazione interna di 27\u00B0 o meno ha buona sensibilit\u00E0 (81%) e specificit\u00E0 (85%) per individuare un angolo alfa superiore a 60\u00B0 nei soggetti con dolore d'anca e inguinale.",
+          "MORFOLOGIA CAM alla RM: rotazione interna supina ridotta (24\u00B0 contro 29\u00B0), rotazione interna da seduto (29\u00B0 contro 37\u00B0), flessione supina (117\u00B0 contro 122\u00B0).",
+          "\u26A0\uFE0F NEGLI ADOLESCENTI: ridotta rotazione interna (RR 1.2) e ridotta flessione d'anca (RR 1.4) si associano a maggior rischio di alterazioni degenerative alla RM a 5 anni.",
+          "CALCIO PROFESSIONISTICO: la rotazione interna in 60 calciatori era inferiore in chi aveva storia di lesione inguinale d'anca (21.1\u00B0 contro 28.3\u00B0).",
+          "TEST DI CRAIG: validato \u2014 differenzia significativamente anteversione femorale, range normale e retroversione confermate alla RM (24\u00B0 contro 15\u00B0 contro 8\u00B0).",
+          "DEFICIT DI FORZA NELLA FAIS: extrarotatori, intrarotatori e flessori significativamente ridotti rispetto agli asintomatici. Deficit del 15-21% nei flessori e del 10-25% negli estensori rispetto all'anca sana.",
+          "\u2192 DATO OPERATIVO: per ogni 1 N\u00B7m/kg aggiuntivo di picco di coppia in abduzione e adduzione ci si pu\u00F2 attendere un aumento medio rispettivamente di 22 e 21 punti sull'iHOT-33.",
+          "\u2500\u2500\u2500 TEST DI PERFORMANCE (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO includere misure di funzione e controllo posturale: SINGLE-LEG SQUAT TEST, STAR EXCURSION BALANCE TEST, DISTANZA DI HOP, SINGLE-LEG SIT TO STAND e misure cronometrate di funzione.",
+          "SEBT nella FAIS: punteggi inferiori del 12% in direzione posterolaterale e del 9% in posteromediale rispetto agli asintomatici.",
+          "MISURE CRONOMETRATE: velocit\u00E0 di cammino autoselezionata 1.32 contro 1.51 m/s | salita scale 5.92 contro 3.05 secondi | sit-to-stand 5 volte 10.75 contro 5.53 secondi.",
+          "CALCIATORI CON FAIS: hop pi\u00F9 corto di 9 cm e 7 ripetizioni in meno al single-leg sit to stand rispetto agli asintomatici. Sprint sui 10 m pi\u00F9 lento del 3%, T test di agilit\u00E0 pi\u00F9 lento dell'8%.",
+          "\u26A0\uFE0F Nessuna differenza tra gruppi nella PROFONDIT\u00C0 DELLO SQUAT.",
+          "\u2192 I deficit sul piano FRONTALE sono pi\u00F9 comuni di quelli sul piano sagittale, e un maggior numero di deficit frontali si associa a peggior funzione (iHOT-33 r \u22120.36)."
+        ]
+      },
+      {
+        title: "Interventi e Gestione Clinica",
+        content: [
+          "\u2500\u2500\u2500 INTERVENTO MULTIMODALE \u2014 RACCOMANDAZIONE PRINCIPALE (Grado B) \u2500\u2500\u2500",
+          "I clinici DEVONO usare interventi multimodali costituiti da: modifica delle attivit\u00E0 ed esercizi di rinforzo per i muscoli specifici dell'anca (ILEOPSOAS, MEDIO GLUTEO, GRANDE GLUTEO, INTRAROTATORI ED EXTRAROTATORI), la muscolatura del TRONCO (addominali e paraspinali) e la muscolatura generale dell'arto inferiore, COMBINATI con terapia manuale, correzione posturale e del movimento, stretching ed esercizi di equilibrio.",
+          "\u2192 Particolarmente indicati nella FAIS e nelle lesioni labrali.",
+          "\u26A0\uFE0F I clinici devono EVITARE di prescrivere esercizi che provocano sintomi o che richiedono ROM tale da creare conflitto (nella FAIS) o stress eccessivo sulle strutture capsulo-legamentose (nell'instabilit\u00E0).",
+          "DURATA MINIMA: raccomandato un intervento basato sull'esercizio di almeno 3 MESI.",
+          "\u2500\u2500\u2500 ALTRI INTERVENTI \u2500\u2500\u2500",
+          "(C) MOVEMENT PATTERN TRAINING: i clinici POSSONO fornire training dei pattern di movimento per ottimizzare i pattern dell'arto inferiore associati al dolore nelle attivit\u00E0 quotidiane.",
+          "(C) ESERCIZIO TERAPEUTICO: i clinici POSSONO usare esercizi e attivit\u00E0 per i deficit di mobilit\u00E0 articolare, flessibilit\u00E0 muscolare e forza identificati all'esame.",
+          "(C) EDUCAZIONE E COUNSELING: i clinici POSSONO usarli per modificare i fattori aggravanti e gestire il dolore associato alla FAIS.",
+          "(F) TERAPIA MANUALE: le mobilizzazioni articolari POSSONO essere usate quando si sospetta che dolore o restrizioni capsulari limitino la mobilit\u00E0. Le mobilizzazioni dei tessuti molli quando si sospetta che muscoli e fasce correlate limitino la mobilit\u00E0 nella FAIS.",
+          "(F) RIEDUCAZIONE NEUROMUSCOLARE: i clinici POSSONO usare procedure progressive per ridurre i deficit di coordinazione del movimento.",
+          "\u26A0\uFE0F (D) TUTORI: sulla base di evidenza CONFLITTUALE non \u00E8 possibile formulare una raccomandazione sull'uso del tutore come intervento isolato.",
+          "\u2500\u2500\u2500 CONSERVATIVO CONTRO CHIRURGIA \u2500\u2500\u2500",
+          "La revisione sistematica di riferimento conclude che la fisioterapia prescritta \u2014 rinforzo d'anca, terapia manuale, rieducazione funzionale specifica ed educazione \u2014 mostra un effetto da piccolo a medio rispetto a modalit\u00E0 passive, stretching e consigli.",
+          "\u26A0\uFE0F La fisioterapia risulta INFERIORE all'artroscopia (effect size piccolo, qualit\u00E0 dell'evidenza moderata). Nell'RCT di riferimento, a 12 mesi l'iHOT-33 saliva da 39.2 a 58.8 nel gruppo chirurgico e da 35.6 a 49.7 nel gruppo fisioterapia (differenza media 6.8).",
+          "\u2192 Lo stesso studio NON ha dimostrato la costo-efficacia dell'artroscopia rispetto alla fisioterapia personalizzata nei primi 12 mesi. E la valutazione del metabolismo cartilagineo con dGEMRIC non mostrava differenze significative a 12 mesi.",
+          "\u2500\u2500\u2500 DATI SUGLI ADOLESCENTI \u2014 MOLTO FAVOREVOLI AL CONSERVATIVO \u2500\u2500\u2500",
+          "In una coorte prospettica di 76 adolescenti con FAIS gestiti con protocollo graduato: il 70% delle anche \u00E8 stato gestito con sola fisioterapia, riposo e modifica delle attivit\u00E0; il 12% ha richiesto infiltrazione steroidea senza arrivare alla chirurgia; solo il 18% ha richiesto artroscopia.",
+          "\u26A0\uFE0F I tre gruppi hanno ottenuto miglioramenti SIMILI di mHHS e NAHS. A 5 anni di follow-up nessuna differenza tra chi ha completato solo il conservativo e chi ha aggiunto la chirurgia.",
+          "MICROINSTABILIT\u00C0: in una serie di 64 soggetti trattati con 2 sedute settimanali per 6 settimane pi\u00F9 programma domiciliare, il 70% NON \u00E8 arrivato alla chirurgia, con aumento di 18 punti al mHHS e 21 all'iHOT-33.",
+          "\u2500\u2500\u2500 CONCLUSIONE OPERATIVA DEGLI AUTORI \u2500\u2500\u2500",
+          "L'evidenza disponibile e il consenso clinico continuano a supportare un TRIAL DI TRATTAMENTO NON CHIRURGICO DI ALMENO 3 MESI per la maggior parte dei pazienti con dolore d'anca non artrosico.",
+          "INDICAZIONI A VALUTAZIONE MEDICA AGGIUNTIVA: peggioramento dei sintomi e dello stato funzionale, periodo di miglioramento minimo che si avvicina ai 6 mesi dall'esordio, o indisponibilit\u00E0 del paziente a partecipare alla riabilitazione.",
+          "INVIO CHIRURGICO PRECOCE da considerare per: anomalie ossee significative che contribuiscono al quadro clinico, e per chi vuole mantenere un livello di attivit\u00E0 elevato, come gli atleti.",
+          "BUONI CANDIDATI ALLA FISIOTERAPIA: pazienti con restrizioni di ROM legate ai tessuti molli, deficit di forza e scarso controllo neuromuscolare, in particolare se in grado di aderire all'educazione sull'evitamento delle attivit\u00E0 che provocano dolore.",
+          "\u26A0\uFE0F DATO SUL TIMING CHIRURGICO (per chi opera): sintomi preoperatori di durata superiore a 2 ANNI sono un predittore indipendente di esiti peggiori su HOS-ADL, HOS-SRA, mHHS e dolore. Chi opera entro 3-6 mesi dall'esordio ottiene punteggi significativamente migliori di chi attende oltre 12 mesi."
+        ]
+      }
+    ]
+  },
+  {
+    id: 33,
+    category: "Traumatologia",
+    color: "#7A6010",
+    icon: "\u{1F9E0}",
+    title: "Concussione e Trauma Cranico Lieve \u2014 CPG 2020",
+    source: "Quatman-Yates et al. | JOSPT 2020;50(4):CPG1-CPG73 | APTA Orthopedics + Sports + Neurologic + Pediatric",
+    pdfUrl: "https://alignedorthotherapy.com/wp-content/uploads/2022/08/jospt.2020.0301.pdf",
+    pdfUrl2: "https://www.jospt.org/doi/10.2519/jospt.2020.0301",
+    tags: ["concussione", "trauma cranico", "mTBI", "vestibolare", "oculomotorio", "cervicale", "esercizio aerobico", "irritabilit\u00E0", "CPG"],
+    summary: "Prima CPG dedicata alla gestione FISIOTERAPICA del paziente dopo evento concussivo. Frutto della collaborazione tra quattro accademie APTA (ortopedia, sport, neurologia, pediatria). Organizza esame e trattamento attorno a 4 domini di deficit legati al movimento e usa il livello di IRRITABILIT\u00C0 per guidare sequenza e priorit\u00E0. Rivolta a soggetti dagli 8 anni in su, senza deficit cognitivi oltre il lieve.",
+    sections: [
+      {
+        title: "Impianto \u2014 Evento Concussivo, 4 Domini, Irritabilit\u00E0",
+        content: [
+          "\u26A0\uFE0F CRITERIO DI INGRESSO: la CPG si applica a QUALSIASI paziente che abbia subito un potenziale evento concussivo, indipendentemente dal fatto che abbia o meno una diagnosi medica di concussione. Pu\u00F2 essere applicata sia per eventi recenti sia remoti.",
+          "\u2192 Gli aggiustamenti NON devono basarsi sul tempo trascorso dall'infortunio, ma sul giudizio clinico riguardo alla presentazione, ai risultati dell'esame e alla risposta agli interventi.",
+          "PERCH\u00C9 'EVENTO CONCUSSIVO': le forze che inducono la concussione possono danneggiare la funzione cerebrale ma anche altre strutture vicine, in particolare RACHIDE CERVICALE e SISTEMA VESTIBOLARE. Il termine serve a non restringere lo sguardo al solo cervello.",
+          "\u2500\u2500\u2500 I 4 DOMINI DI DEFICIT \u2500\u2500\u2500",
+          "1. DEFICIT MUSCOLOSCHELETRICI CERVICALI \u2014 possono causare cervicalgia, cefalea con o senza dolore al collo, vertigini e alterato controllo posturale. Deficit del controllo sensomotorio possono originare da alterazioni dell'afferenza cervicale e influenzare i sistemi visivo e vestibolare. \u26A0\uFE0F Anche SENZA cervicalgia, i deficit cervicali possono essere la fonte sottostante di altri sintomi.",
+          "2. DEFICIT VESTIBOLO-OCULOMOTORI \u2014 contribuiscono a vertigini, problemi di equilibrio, visione offuscata, cefalea, nausea, fotosensibilit\u00E0, sensibilit\u00E0 ai suoni, annebbiamento mentale, difficolt\u00E0 di lettura e concentrazione, ansia e affaticamento.",
+          "3. DISFUNZIONE AUTONOMICA E INTOLLERANZA ALLO SFORZO \u2014 ipotizzato un disaccoppiamento tra sistema nervoso autonomo centrale e cuore, con ridotta capacit\u00E0 di regolare flusso cerebrale, pressione e frequenza cardiaca in risposta allo sforzo. \u26A0\uFE0F Gli effetti dello sforzo possono non comparire durante l'esercizio ma emergere pi\u00F9 tardi.",
+          "4. DEFICIT DI FUNZIONE MOTORIA \u2014 equilibrio statico e dinamico, coordinazione e controllo motorio, tempo di reazione, dual e multitasking. \u26A0\uFE0F Possono PERSISTERE per mesi o anni ed essere presenti anche quando i sintomi sembrano risolti, aumentando il rischio di future concussioni e altri infortuni negli atleti e in professioni ad alto rischio.",
+          "\u2500\u2500\u2500 IL CONCETTO DI IRRITABILIT\u00C0 \u2500\u2500\u2500",
+          "L'irritabilit\u00E0 riflette la capacit\u00E0 del tessuto o del sistema corporeo di tollerare stress fisico o fisiologico. Guida sequenza dello screening, dell'esame e della gestione.",
+          "PARAMETRI DA CONSIDERARE: frequenza di provocazione dei sintomi | vigore del movimento necessario a riprodurli | severit\u00E0 una volta provocati | facilit\u00E0 con cui vengono provocati | fattori che li alleviano | quanto, quanto rapidamente e quanto completamente si risolvono.",
+          "\u2500\u2500\u2500 RIPOSO: IL CAMBIO DI PARADIGMA \u2500\u2500\u2500",
+          "\u26A0\uFE0F Sia il riposo STRETTO sia sessioni intense di attivit\u00E0 cognitiva o fisica in fase acuta possono associarsi a traiettorie di recupero RITARDATE.",
+          "Il riposo prolungato pu\u00F2 produrre effetti secondari simili ai comuni sintomi post-concussivi \u2014 decondizionamento con intolleranza allo sforzo, ansia o depressione da isolamento sociale \u2014 rendendo difficile capire se i sintomi persistenti derivino dal riposo prescritto o dall'infortunio stesso.",
+          "INDICAZIONE CORRENTE: 24-48 ore di riposo completo o 'riposo relativo' (reintegro graduale dell'attivit\u00E0 usuale con indicazione di riposare al bisogno), seguito da progressioni di attivit\u00E0 basate sulla risposta sintomatologica.",
+          "DECORSO: molti recuperano in 7-14 giorni, ma dal 5% al 58% presenta sintomi, deficit o limitazioni persistenti. La traiettoria pu\u00F2 NON essere lineare: molti pazienti sperimentano riacutizzazioni durante il recupero, talvolta ritardate e associate alle attivit\u00E0 delle 24 ore precedenti."
+        ]
+      },
+      {
+        title: "Screening e Diagnosi \u2014 Raccomandazioni",
+        content: [
+          "(A) I fisioterapisti DEVONO effettuare screening su TUTTI i soggetti che abbiano subito un potenziale evento concussivo e documentare presenza o assenza di sintomi, deficit e limitazioni funzionali.",
+          "(A) I fisioterapisti DEVONO effettuare screening per segni di emergenza medica o patologia severa (lesione cerebrale pi\u00F9 grave, condizioni mediche, lesione del rachide cervicale) che richiedano ulteriore valutazione da parte di altri professionisti sanitari.",
+          "\u2500\u2500\u2500 SCREENING DI EMERGENZA \u2014 CRITERI \u2500\u2500\u2500",
+          "Il rischio di lesione cerebrale severa che richieda intervento neurochirurgico \u00E8 BASSO se il paziente: presenta stato mentale relativamente normale almeno 4 ore dopo il trauma, NON riferisce cefalea severa, NON ha segni di deficit neurologico focale, e NON presenta fattori ad alto rischio (Glasgow Coma Scale sotto 13 a 2 ore dal trauma, sospetta frattura cranica aperta o segni di frattura della base, vomito pi\u00F9 di due volte).",
+          "PEDIATRIA (8-18 anni entro 24 ore): la regola PECARN identifica i bambini a rischio molto basso. Segni che TC e monitoraggio acuto non siano necessari: stato mentale normale, nessuna perdita di coscienza, nessun vomito, meccanismo non severo, nessun segno di frattura della base cranica, nessuna cefalea severa.",
+          "\u26A0\uFE0F SCREENING CERVICALE OBBLIGATORIO, anche in assenza di cervicalgia. Segni che richiedono invio: infezione, cancro, coinvolgimento cardiaco, insufficienza arteriosa (vertigini associate a segni neurologici), insufficienza legamentosa cervicale alta (test del trasverso o dell'alare positivi), disfunzione inspiegata dei nervi cranici, segni di compressione midollare centrale, frattura secondo Canadian C-spine rules o criteri NEXUS.",
+          "\u2500\u2500\u2500 DIAGNOSI DIFFERENZIALE \u2500\u2500\u2500",
+          "(A) I fisioterapisti DEVONO valutare potenziali segni e sintomi di concussione NON DIAGNOSTICATA in chi ha subito un evento concussivo senza aver ricevuto la diagnosi. La valutazione deve includere la TRIANGOLAZIONE delle informazioni da paziente, familiari e testimoni, anamnesi, osservazione ed esame fisico, e una scala o checklist dei sintomi appropriata all'et\u00E0.",
+          "(A) I fisioterapisti DEVONO effettuare screening per salute mentale, deficit cognitivo e altre diagnosi concomitanti, e inviare per valutazione aggiuntiva quando indicato.",
+          "(A) I fisioterapisti DEVONO condurre e documentare un'anamnesi COMPLETA: storia medica passata, storia di salute mentale, meccanismi dell'infortunio, sintomi correlati e strategie di gestione precoce.",
+          "\u26A0\uFE0F IMAGING E BIOMARCATORI: le CPG di alta qualit\u00E0 NON supportano l'uso dell'imaging per la diagnosi immediata in assenza di sospetto di lesione cerebrale pi\u00F9 severa. L'uso di biomarcatori e di dispositivi di misurazione integrati nel casco NON \u00E8 raccomandato al di fuori della ricerca.",
+          "\u26A0\uFE0F Non esiste un gold standard per gli strumenti diagnostici; il gruppo non ha potuto raccomandare specificamente alcuna scala sintomatologica per insufficienza di evidenza sulla loro affidabilit\u00E0 e validit\u00E0 nell'ampio spettro di pazienti che il fisioterapista incontra.",
+          "\u26A0\uFE0F Una CPG di alta qualit\u00E0 raccomanda CONTRO l'uso di valutazioni neurocognitive complete o focalizzate nei primi 30 giorni, suggerendo screening generale finch\u00E9 i sintomi non appaiano persistenti."
+        ]
+      },
+      {
+        title: "Esame \u2014 Sequenza e Domini",
+        content: [
+          "(B) Nei pazienti giudicati sicuri e appropriati, i fisioterapisti DEVONO determinare e documentare la necessit\u00E0 di fisioterapia sulla base di un esame MULTISISTEMA completo che includa i quattro domini.",
+          "\u2500\u2500\u2500 SEQUENZA BASATA SULL'IRRITABILIT\u00C0 (Grado F) \u2500\u2500\u2500",
+          "Prima di iniziare l'esame, i fisioterapisti DOVREBBERO determinare i livelli probabili di irritabilit\u00E0 e pianificare strategicamente la sequenza o il rinvio delle procedure.",
+          "ORDINE RACCOMANDATO: prima triage per l'irritabilit\u00E0 della CERVICALGIA, poi per VERTIGINI e/o CEFALEA.",
+          "ALTA IRRITABILIT\u00C0 CERVICALE senza segni di patologia seria: esaminare PRIMA i rachidi cervicale e toracico e trattare i reperti per favorire il sollievo sintomatico (stretching, mobilizzazione dei tessuti molli, esercizio terapeutico, terapie fisiche) e SOSTENERE la tolleranza all'esame degli altri sistemi.",
+          "VERTIGINI, VERTIGINE OGGETTIVA E/O CEFALEA: esaminare a fondo rachide cervicale e toracico, funzione vestibolare e oculomotoria, e ipotensione ortostatica/disfunzione autonomica. Iniziare dai test attesi come MENO irritanti e procedere verso i pi\u00F9 irritanti.",
+          "\u2500\u2500\u2500 CERVICALE (Grado C) \u2500\u2500\u2500",
+          "Esaminare rachide cervicale e toracico se il paziente riferisce: cervicalgia, cefalea, vertigini, affaticamento, problemi di equilibrio o difficolt\u00E0 a focalizzare visivamente un bersaglio.",
+          "TEST RACCOMANDATI: ROM, forza ed endurance muscolare, dolorabilit\u00E0 alla palpazione dei muscoli cervicali e scapolotoracici, mobilit\u00E0 articolare passiva cervicale e toracica, e JOINT POSITION ERROR TESTING.",
+          "(F) Si POSSONO esaminare cervicale, toracico e ATM anche in chi NON riferisce quei sintomi, per individuare deficit sottili.",
+          "\u2500\u2500\u2500 VESTIBOLO-OCULOMOTORIO (Grado B) \u2500\u2500\u2500",
+          "Esaminare in presenza di: cefalea, vertigini, vertigine oggettiva, nausea, affaticamento, problemi di equilibrio, sensibilit\u00E0 al movimento visivo, visione offuscata o difficolt\u00E0 a focalizzare bersagli fermi o in movimento.",
+          "COSA ESAMINARE: allineamento oculare, inseguimenti lenti, saccadi, vergenza e accomodazione, stabilit\u00E0 dello sguardo, acuit\u00E0 visiva dinamica, sensibilit\u00E0 al movimento visivo, ottundimento da ipotensione ortostatica, e vertigine da VPPB.",
+          "(A) Se si sospetta VPPB, i fisioterapisti DOVREBBERO valutare con test di Dix-Hallpike o altro test posizionale appropriato.",
+          "\u2500\u2500\u2500 AUTONOMICO E TOLLERANZA ALLO SFORZO (Grado B) \u2500\u2500\u2500",
+          "Testare ipotensione ortostatica e disfunzione autonomica valutando frequenza cardiaca e pressione in POSIZIONE SUPINA, SEDUTA ED ERETTA.",
+          "Condurre un TEST DI TOLLERANZA ALLO SFORZO GRADUATO E GUIDATO DAI SINTOMI in chi riferisce intolleranza allo sforzo, vertigini, cefalea e/o desidera tornare ad attivit\u00E0 ad alto impegno (sport, servizio militare attivo, lavori manuali).",
+          "\u26A0\uFE0F Nei pazienti molto sintomatici a riposo il test va RINVIATO finch\u00E9 i sintomi non siano stabili e pi\u00F9 tollerabili a riposo.",
+          "(C) In presenza di deficit vestibolo-oculomotori o cervicali, usare la CYCLETTE per il test, per ridurre il rischio di esacerbare i deficit o compromettere la validit\u00E0 dei risultati.",
+          "\u2192 Frequenza cardiaca e pressione vanno monitorate periodicamente durante il test e dopo.",
+          "\u2500\u2500\u2500 FUNZIONE MOTORIA (Grado B) \u2500\u2500\u2500",
+          "Esaminare equilibrio statico e dinamico, coordinazione e controllo motorio, e dual/multitasking (compiti motori insieme a compiti cognitivi o compiti complessi con pi\u00F9 sottocompiti).",
+          "\u2500\u2500\u2500 FATTORI PSICOSOCIALI (Grado E) \u2500\u2500\u2500",
+          "Elicitare, valutare e documentare autoefficacia e capacit\u00E0 di autogestione. Fattori da considerare: strategie di coping in risposta a situazioni stressanti | tipo di sistema di supporto | fattori di rischio per recupero ritardato (storia di disturbi di salute mentale o uso di sostanze) | atteggiamento verso il recupero | accesso a risorse.",
+          "\u26A0\uFE0F Nel valutare autoefficacia e autogestione, i fisioterapisti DOVREBBERO spiegare ed ENFATIZZARE che la maggior parte dei sintomi e dei deficit dopo concussione MIGLIORA."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Raccomandazioni",
+        content: [
+          "\u2500\u2500\u2500 EDUCAZIONE (Grado B e A) \u2500\u2500\u2500",
+          "(B) I fisioterapisti DEVONO educare i pazienti su: autogestione dei sintomi, importanza del RIPOSO RELATIVO (riposare al bisogno) invece del riposo stretto, benefici del reinserimento progressivo nelle attivit\u00E0, importanza del SONNO, strategie di dosaggio sicuro del ritorno all'attivit\u00E0, e segni che richiedono follow-up.",
+          "(A) I fisioterapisti DEVONO educare pazienti e familiari sui vari sintomi, deficit e limitazioni funzionali associati alla concussione, e SOTTOLINEARE che la maggior parte dei pazienti recupera relativamente in fretta.",
+          "\u2192 RAZIONALE ESPLICITO: fornire questa informazione aiuta a evitare il rinforzo inavvertito di aspettative di recupero peggiori.",
+          "\u2500\u2500\u2500 TRIAGE E TEMPI (Grado F e B) \u2500\u2500\u2500",
+          "(F) Usare i risultati dell'esame per assegnare il paziente a una di due categorie: con deficit legati al movimento, buoni candidati alla fisioterapia; oppure senza deficit legati al movimento identificati.",
+          "\u26A0\uFE0F Il TEMPO TRASCORSO dall'infortunio pu\u00F2 influenzare il livello di irritabilit\u00E0 ma NON deve essere un determinante primario nel decidere quando la fisioterapia sia appropriata.",
+          "\u2192 L'evidenza indica che la fisioterapia PRECOCE dopo concussione \u00E8 SICURA, e che un avvio pi\u00F9 precoce degli interventi pu\u00F2 facilitare un recupero pi\u00F9 rapido.",
+          "(B) Progettare un piano di intervento PERSONALIZZATO allineato con deficit identificati, limitazioni funzionali e di partecipazione, capacit\u00E0 di autogestione e livelli di irritabilit\u00E0.",
+          "(B) Inviare per consulenza e follow-up ad altri professionisti in caso di: emicrania persistente e altre cefalee croniche, deficit visivi (incluso allineamento oculare), deficit uditivi, disturbi del sonno, sintomi di salute mentale, problemi cognitivi, o qualsiasi altra diagnosi medica che possa presentarsi con sintomi simili.",
+          "\u2500\u2500\u2500 CERVICALE (Grado B) \u2500\u2500\u2500",
+          "Implementare interventi per la disfunzione cervicale e toracica: esercizi di forza, ROM, posizione posturale e/o funzione sensomotoria (cinestesia cervicocefalica, controllo della posizione del capo, disfunzione dei muscoli cervicali) e terapia manuale ai rachidi cervicale e toracico.",
+          "\u2500\u2500\u2500 VESTIBOLO-OCULOMOTORIO (Grado A e B) \u2500\u2500\u2500",
+          "(A) Se si identifica una VPPB, i fisioterapisti DOVREBBERO usare le manovre di riposizionamento canalitico.",
+          "(B) I fisioterapisti CON ADEGUATA COMPETENZA in riabilitazione vestibolare e oculomotoria devono implementare un piano individualizzato. Se \u00E8 presente vertigine visiva o sensibilit\u00E0 al movimento visivo, pu\u00F2 essere utile anche un programma individualizzato di abituazione al movimento visivo.",
+          "\u26A0\uFE0F I pazienti con cervicalgia o altri deficit cervicali possono PEGGIORARE per via dei movimenti ripetuti del capo durante la riabilitazione vestibolare: le implicazioni degli interventi di rotazione del capo sui deficit cervicali concomitanti vanno considerate e affrontate.",
+          "(F) I fisioterapisti PRIVI di formazione adeguata in riabilitazione vestibolare e oculomotoria DEVONO inviare a un clinico con competenza appropriata.",
+          "\u2500\u2500\u2500 ESERCIZIO AEROBICO (Grado A) \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO implementare un programma di ESERCIZIO AEROBICO PROGRESSIVO GUIDATO DAI SINTOMI nei pazienti che presentano intolleranza allo sforzo e/o pianificano di tornare a livelli di attivit\u00E0 fisica vigorosa.",
+          "CRITERIO DI AVVIO: il momento pu\u00F2 variare, ma si pu\u00F2 usare come criterio guida il momento in cui i sintomi si siano stabilizzati a un livello di irritabilit\u00E0 moderato o inferiore.",
+          "(E) I fisioterapisti POSSONO implementare il training aerobico progressivo in TUTTI i pazienti, inclusi quelli senza intolleranza allo sforzo e quelli che non intendono impegnarsi in attivit\u00E0 vigorosa, per ridurre il rischio di decondizionamento, promuovere la guarigione cerebrale funzionale e fornire un'opzione non farmacologica per migliorare la salute mentale.",
+          "\u2500\u2500\u2500 FUNZIONE MOTORIA (Grado C) \u2500\u2500\u2500",
+          "Implementare interventi che affrontino i deficit identificati o sospetti e facciano progredire verso obiettivi di performance funzionale pi\u00F9 elevati. Fortemente incoraggiati gli interventi su: equilibrio statico, equilibrio dinamico, coordinazione e controllo motorio, dual/multitasking. Incoraggiati anche interventi che migliorino direttamente la funzione motoria per compiti specifici di lavoro, ricreazione o attivit\u00E0.",
+          "\u2500\u2500\u2500 MONITORAGGIO (Grado F) \u2500\u2500\u2500",
+          "Documentare regolarmente i sintomi, rivalutare i deficit legati al movimento e somministrare le misure di esito selezionate secondo necessit\u00E0.",
+          "\u2500\u2500\u2500 AVVERTENZA SULLA COMPETENZA \u2500\u2500\u2500",
+          "\u26A0\uFE0F Il documento segnala esplicitamente una barriera all'implementazione: un paziente post-concussione pu\u00F2 richiedere CONTEMPORANEAMENTE competenze di terapia manuale ortopedica e di riabilitazione vestibolare. I fisioterapisti devono essere consapevoli dei propri punti di forza e limiti e inviare o consultare colleghi quando necessario. Chi intende trattare regolarmente questi pazienti \u00E8 incoraggiato a cercare formazione specialistica."
+        ]
+      }
+    ]
+  },
+  {
+    id: 34,
+    category: "Geriatria",
+    color: "#2E6B4F",
+    icon: "\u{1F9B4}",
+    title: "Frattura di Femore nell'Anziano \u2014 CPG 2021",
+    source: "McDonough et al. | JOSPT 2021;51(2):CPG1-CPG81 | APTA Orthopedics + Academy of Geriatric Physical Therapy",
+    pdfUrl: "https://www.orthopt.org/uploads/content_files/files/PT_Management_of_Older_Adults_with_Hip_Fracture.pdf",
+    pdfUrl2: "https://www.orthopt.org/uploads/content_files/files/jospt.2021.0502.pdf",
+    tags: ["frattura femore", "anziano", "geriatria", "ortogeriatria", "mobilizzazione precoce", "delirium", "esercizio strutturato", "CPG"],
+    summary: "CPG sulla gestione fisioterapica dell'anziano (65+) con frattura di femore da trauma a bassa energia. Copre l'intero episodio di cura: fase acuta ospedaliera, post-acuta e comunitaria. Non riguarda fratture da trauma ad alta energia, fratture patologiche, fratture di acetabolo n\u00E9 pazienti in gestione palliativa. Le raccomandazioni sono organizzate per setting.",
+    sections: [
+      {
+        title: "Epidemiologia, Prognosi e Precauzioni",
+        content: [
+          "\u26A0\uFE0F La frattura di femore \u00E8 tra le prime 10 cause di perdita di anni di vita corretti per disabilit\u00E0 negli anziani.",
+          "Il 90% delle fratture di femore negli over 65 deriva da una CADUTA DA ALTEZZA DEL SUOLO: sono chiamate fratture da fragilit\u00E0.",
+          "MORTALIT\u00C0: rischio di morte fino a 15 volte maggiore nel primo mese rispetto ai coetanei non infortunati. Meta-analisi: rischio fino a 8 volte maggiore entro 3 mesi. Mortalit\u00E0 a 1 anno del 21.9% nelle donne e 32.5% negli uomini.",
+          "\u26A0\uFE0F L'eccesso di mortalit\u00E0 non \u00E8 spiegato interamente dal cattivo stato di salute pre-frattura: parte del rischio \u00E8 legata alla frattura stessa. Uno studio ha rilevato eccesso di mortalit\u00E0 significativo a 6 mesi (hazard ratio 6.28) ma NON a 12 mesi.",
+          "RIFRATTURA: il rischio di frattura successiva a 1 anno \u00E8 del 4-8%, con probabilit\u00E0 crescente per et\u00E0, sesso femminile e comorbidit\u00E0. La frattura di femore \u00E8 il tipo pi\u00F9 probabile di frattura successiva.",
+          "\u26A0\uFE0F La gestione della frattura si associa a maggior rischio di iniziare oppioidi e altri farmaci con effetti collaterali importanti che AUMENTANO il rischio di caduta.",
+          "\u2500\u2500\u2500 CLASSIFICAZIONE ANATOMICA \u2500\u2500\u2500",
+          "INTRACAPSULARI: collo femorale. EXTRACAPSULARI: area trocanterica (intertrocanteriche) e appena distalmente (sottotrocanteriche).",
+          "Negli Stati Uniti circa met\u00E0 sono intertrocanteriche, il 37% del collo femorale, il 14% sottotrocanteriche. Le intertrocanteriche si associano a peggiore stato di salute e la loro incidenza relativa aumenta con l'et\u00E0.",
+          "\u2500\u2500\u2500 CARICO \u2014 PUNTO OPERATIVO CENTRALE \u2500\u2500\u2500",
+          "\u26A0\uFE0F Dopo chirurgia per frattura di femore, RARAMENTE vengono poste restrizioni sullo stato di carico.",
+          "L'evidenza supporta il CARICO SECONDO TOLLERANZA il pi\u00F9 precocemente possibile dopo l'intervento, sulla base dell'assenza di eventi avversi o complicanze e dei miglioramenti di equilibrio e mobilit\u00E0.",
+          "\u2500\u2500\u2500 DISABILIT\u00C0 IATROGENA \u2500\u2500\u2500",
+          "Una task force internazionale ha individuato tre elementi del declino funzionale durante l'ospedalizzazione: fragilit\u00E0 preesistente, severit\u00E0 della diagnosi di ammissione, e PROCESSO E STRUTTURA DELLE CURE OSPEDALIERE.",
+          "\u2500\u2500\u2500 MECCANICA DELLA CADUTA \u2500\u2500\u2500",
+          "Una caduta dalla stazione eretta pu\u00F2 produrre 10 volte la forza necessaria a fratturare il femore di una donna anziana, eppure solo l'1% delle cadute nelle donne anziane esita in frattura d'anca.",
+          "La CADUTA LATERALE \u00E8 il tipo pi\u00F9 probabile. Nei residenti in strutture di lungodegenza, i predittori di frattura sono: cadere lateralmente, densit\u00E0 ossea pi\u00F9 bassa, statura pi\u00F9 alta, BMI pi\u00F9 basso e mobilit\u00E0 compromessa.",
+          "MODELLAZIONE BIOMECCANICA: la flessione dell'arto inferiore combinata con rotazione assiale riduce la forza d'impatto, e usare il braccio per attutire la caduta riduce il rischio di frattura."
+        ]
+      },
+      {
+        title: "Misure di Esito \u2014 Cosa Misurare e Dove",
+        content: [
+          "\u2500\u2500\u2500 IN TUTTI I SETTING \u2500\u2500\u2500",
+          "(A) I fisioterapisti DEVONO testare e documentare la FORZA DEGLI ESTENSORI DI GINOCCHIO in tutti i setting.",
+          "\u26A0\uFE0F DATO: circa 2 settimane dopo la frattura, la forza di estensione del ginocchio del lato fratturato \u00E8 in media ridotta di OLTRE IL 50% rispetto al lato sano.",
+          "TECNICA: dinamometro portatile con approccio a cinghia fissata, 'make test' con contrazioni isometriche massimali mantenute 3-5 secondi. ICC 0.95 per l'arto fratturato; SEM 1.0 kg, MDC90 2.3 kg. Per i pi\u00F9 fragili si pu\u00F2 usare il test muscolare manuale.",
+          "(A) I fisioterapisti DEVONO somministrare e documentare la SCALA VERBALE DI VALUTAZIONE DEL DOLORE (VRS) in tutti i setting.",
+          "\u2192 La VRS a 5 punti (0-4) si \u00E8 dimostrata SUPERIORE alla scala analogica visiva nei pazienti con frattura di femore, con evidenza di utilizzabilit\u00E0 anche nei pazienti con deficit cognitivo.",
+          "(A) VELOCIT\u00C0 DEL CAMMINO in tutti i setting quando il paziente non richiede assistenza umana. Documentare: velocit\u00E0 comfortevole o massima, ausilio usato, partenza da fermo o lanciata. MCID 0.10 m/s.",
+          "(A) CUMULATED AMBULATION SCORE (CAS) nei setting acuto e post-acuto, fino al raggiungimento della deambulazione indipendente.",
+          "\u2192 Il CAS valuta 3 attivit\u00E0 di base: alzarsi e coricarsi dal letto, passaggio seduto-in piedi-seduto, e cammino. Ogni attivit\u00E0 da 0 a 2 punti, totale giornaliero 0-6. Utilizzabile in TUTTI i pazienti indipendentemente da livello funzionale e cognitivo. MCID 0.80 punti.",
+          "(A) TIMED UP-AND-GO in tutti i setting per mobilit\u00E0 e rischio di caduta, quando non serve assistenza umana. MDC95 6.8 secondi; MCID 2.5 secondi (ancorato) o 4.6 (distribuzionale).",
+          "\u26A0\uFE0F ATTENZIONE ALL'AUSILIO NEL TUG: i pazienti che usano il deambulatore impiegano in media 13.6 secondi IN PI\u00D9 rispetto a quando usano un rollator a 4 ruote. Usare sempre lo stesso ausilio e le stesse istruzioni tra test e retest.",
+          "(B) NEW MOBILITY SCORE: nel setting acuto per valutare lo stato PRE-FRATTURA, e nei setting post-acuto e comunitario per lo stato attuale e il recupero del livello pre-frattura.",
+          "\u2192 Il livello funzionale pre-frattura e l'et\u00E0 avanzata sono i predittori PI\u00D9 FORTI dell'esito. Molti pazienti non recuperano la funzione pre-frattura, che resta comunque l'obiettivo minimo importante per tutti.",
+          "(B) FALLS EFFICACY SCALE-INTERNATIONAL in tutti i setting per misurare la preoccupazione di cadere.",
+          "\u2500\u2500\u2500 SOLO NEL POST-ACUTO \u2500\u2500\u2500",
+          "(B) Testare e documentare la forza degli ESTENSORI E ABDUTTORI D'ANCA.",
+          "(B) 5-TIMES SIT-TO-STAND o 30-second sit-to-stand nei setting post-acuto, domiciliare e ambulatoriale, per mobilit\u00E0 e rischio di caduta.",
+          "(B) 6-MINUTE WALK TEST nei setting post-acuto e comunitario quando il paziente non richiede assistenza fisica e c'\u00E8 un corridoio adeguato. MDC95 59.4 m; MCID 35.4 m.",
+          "\u26A0\uFE0F Il dolore correlato alla frattura si associa alla performance al 6MWT: va documentato durante il test.",
+          "(C) POSSONO essere usati: Short Physical Performance Battery in tutti i setting (completamento non sempre fattibile nel primo post-operatorio), de Morton Mobility Index, Functional Independence Measure (se formati e con licenza), AM-PAC, EQ-5D-3L e SF-36.",
+          "\u2500\u2500\u2500 SET MINIMO DI DATI (best practice) \u2500\u2500\u2500",
+          "PROCESSO: tempo dalla chirurgia al primo trasferimento fuori dal letto | tempo dalla chirurgia alla prima deambulazione.",
+          "IMPAIRMENT: forza estensori di ginocchio | VRS del dolore.",
+          "PERFORMANCE: CAS | TUG | velocit\u00E0 del cammino.",
+          "AUTO-RIFERITO: New Mobility Score per documentare stato pre-frattura e recupero."
+        ]
+      },
+      {
+        title: "Gestione Interprofessionale",
+        content: [
+          "\u2500\u2500\u2500 DELIRIUM (Grado A) \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO partecipare a programmi multicomponente NON farmacologici erogati da un team interprofessionale, per TUTTA la durata del ricovero, negli anziani a rischio sottoposti a chirurgia, per PREVENIRE il delirium.",
+          "STRATEGIE PREVENTIVE: adeguata gestione del dolore, facilitazione del movimento attraverso la terapia e incoraggiamento alle attivit\u00E0.",
+          "SEGNI DA RICONOSCERE: alterazioni cognitive (peggior concentrazione, risposte rallentate, confusione), alterazioni percettive (allucinazioni visive o uditive), ridotta mobilit\u00E0, irrequietezza, agitazione, alterazioni dell'appetito, disturbi del sonno, alterazioni del comportamento sociale (mancata cooperazione a richieste ragionevoli, ritiro, cambiamenti di comunicazione, umore o atteggiamento).",
+          "\u2500\u2500\u2500 DOLORE (Grado F) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO valutare il dolore correlato alla frattura A RIPOSO E DURANTE L'ATTIVIT\u00C0 (per esempio nel cammino) e implementare strategie per minimizzarlo DURANTE LA SEDUTA, allo scopo di ottimizzare la mobilit\u00E0.",
+          "STRATEGIE: tempistica appropriata della terapia farmacologica, consultazione del team, approcci fisioterapici psicologicamente informati per la gestione non farmacologica.",
+          "\u2500\u2500\u2500 ULCERE DA PRESSIONE (Grado F) \u2500\u2500\u2500",
+          "I clinici DEVONO effettuare screening per il rischio. Fattori: mobilit\u00E0 significativamente limitata, perdita significativa di sensibilit\u00E0, ulcera pregressa o in atto, deficit nutrizionale, incapacit\u00E0 di riposizionarsi, incontinenza, deficit cognitivo significativo.",
+          "\u2500\u2500\u2500 CADUTE (Grado A) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO valutare e documentare i fattori di rischio di caduta e contribuire alla gestione interprofessionale, usando le raccomandazioni dell'Academy of Geriatric Physical Therapy (guida dedicata in questa app).",
+          "\u2500\u2500\u2500 PREVENZIONE SECONDARIA DELLE FRATTURE (Grado F) \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO contribuire affinch\u00E9 gli anziani con frattura di femore siano adeguatamente valutati e trattati per OSTEOPOROSI e rischio di fratture future.",
+          "\u2500\u2500\u2500 AUSILI E LIVELLO DI ASSISTENZA (Grado F) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO fornire indicazioni al team e ai pazienti su ausili e livello di assistenza per trasferimenti e deambulazione.",
+          "\u2500\u2500\u2500 OBIETTIVI INDIVIDUALI (Grado F) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO elicitare gli obiettivi individuali di recupero: mobilit\u00E0 di base indipendente, raggiungimento del livello funzionale precedente, ritorno alla residenza pre-frattura, attivit\u00E0 a sostegno del benessere a lungo termine. Gli obiettivi vanno rivisti lungo tutto il continuum di cura.",
+          "\u2500\u2500\u2500 TRANSIZIONE DALL'OSPEDALE (Grado F) \u2500\u2500\u2500",
+          "\u26A0\uFE0F Dopo il trasferimento, le persone con deficit persistenti (inclusi i residenti in casa di riposo) DEVONO ricevere una valutazione ENTRO 72 ORE dal fisioterapista della struttura o domiciliare.",
+          "INFORMAZIONI DA TRASMETTERE: tipo di frattura e procedura chirurgica | sintesi del percorso riabilitativo e obiettivi attuali | PRECAUZIONI E PARAMETRI DI ATTIVIT\u00C0 (stato di carico, restrizioni di ROM, guida alla progressione) | diagnosi e stato di salute | abilit\u00E0 funzionali | valutazione del dolore | bisogni assistenziali | bisogni psicologici | gestione dei farmaci | circostanze sociali e bisogni dei caregiver | piani di follow-up."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Raccomandazioni per Fase",
+        content: [
+          "\u2500\u2500\u2500 ESERCIZIO STRUTTURATO \u2014 RACCOMANDAZIONE CARDINE (Grado A) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO fornire esercizio strutturato, che includa RINFORZO RESISTIVO PROGRESSIVO AD ALTA INTENSIT\u00C0, TRAINING DELL'EQUILIBRIO, ESERCIZI IN CARICO e TRAINING DELLA MOBILIT\u00C0 FUNZIONALE.",
+          "EFFICACIA: meta-analisi su 13 trial e 1903 partecipanti \u2014 SMD sulla mobilit\u00E0 di 0.35. I programmi CON resistenza progressiva risultano pi\u00F9 efficaci di quelli senza (variazione di SMD 0.58), e l'esercizio erogato SOLO in ospedale \u00E8 MENO efficace di quello erogato anche in altri setting.",
+          "ESERCIZIO ESTESO OLTRE LA DIMISSIONE: effect size significativi per forza di estensione del ginocchio lato fratturato (0.47) e sano (0.45), equilibrio (0.32), test di performance (0.53), TUG (0.83) e velocit\u00E0 rapida del cammino (0.42).",
+          "\u26A0\uFE0F I programmi COMUNITARI hanno effect size MAGGIORI di quelli domiciliari.",
+          "TRAINING RESISTIVO PROGRESSIVO \u2014 revisione su 8 RCT: miglioramenti significativi di funzione fisica (SMD 0.41), mobilit\u00E0 (0.50), ADL (0.24), equilibrio (0.55), forza o potenza degli arti inferiori (0.42) e misure di performance (0.84).",
+          "\u26A0\uFE0F NON \u00E8 stato possibile fornire raccomandazioni di DOSAGGIO specifiche, perch\u00E9 gli studi non hanno confrontato dosi diverse.",
+          "\u2500\u2500\u2500 DEMENZA LIEVE-MODERATA (Grado B) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO fornire fisioterapia ai pazienti con demenza lieve-moderata usando INTERVENTI E PRESCRIZIONI SIMILI a quelli per i pazienti senza demenza.",
+          "\u2192 Le persone con demenza lieve-moderata mostrano guadagni funzionali RELATIVI SIMILI a quelli senza demenza, e hanno la stessa probabilit\u00E0 di tornare alla situazione abitativa precedente.",
+          "\u26A0\uFE0F La raccomandazione \u00E8 stata rafforzata rispetto al livello di evidenza per l'assenza di prove a favore del NON fornire cure equivalenti e per i potenziali danni sostanziali del non farlo.",
+          "\u2500\u2500\u2500 FASE ACUTA OSPEDALIERA \u2500\u2500\u2500",
+          "(A) Gli anziani con frattura di femore DOVREBBERO essere trattati in un programma ORTOGERIATRICO MULTIDISCIPLINARE, che includa fisioterapia e mobilizzazione precoce.",
+          "\u2192 EFFICACIA: alla dimissione, minore mortalit\u00E0 (RR 0.72), minore ammissione in casa di riposo (RR 0.64) e migliore funzione fisica (OR 1.75). A 3-12 mesi gli effetti si mantengono.",
+          "(B) Ai pazienti DOVREBBE essere offerta fisioterapia intraospedaliera AD ALTA FREQUENZA (QUOTIDIANA) dopo l'intervento, con durata secondo tolleranza, inclusa l'istruzione a un programma domiciliare.",
+          "(A) I clinici DEVONO fornire trasferimento assistito fuori dal letto e deambulazione IL PRIMA POSSIBILE dopo l'intervento e ALMENO QUOTIDIANAMENTE in seguito, salvo controindicazioni mediche o chirurgiche.",
+          "(C) POSSONO fornire training aerobico DEGLI ARTI SUPERIORI in aggiunta al training resistivo, di equilibrio e di mobilit\u00E0 nel periodo post-acuto precoce.",
+          "(C) POSSONO usare l'elettrostimolazione per il rinforzo del quadricipite se altri approcci non sono stati efficaci, e per il dolore se non sufficientemente gestito con le strategie abituali.",
+          "\u2500\u2500\u2500 FASE DOMICILIARE E COMUNITARIA \u2500\u2500\u2500",
+          "(A) I clinici DEVONO fornire opportunit\u00E0 di TERAPIE AGGIUNTIVE se permangono deficit di forza, equilibrio e funzione OLTRE LE 8-16 SETTIMANE dalla frattura.",
+          "\u2192 Le terapie aggiuntive devono includere training di forza, equilibrio, funzionale e del cammino, per affrontare deficit, limitazioni di attivit\u00E0 e rischio di caduta. Possono comprendere servizi ambulatoriali, programmi domiciliari progressivi o programmi comunitari evidence-based.",
+          "(A) I fisioterapisti DEVONO fornire raccomandazioni ai pazienti per massimizzare l'ATTIVIT\u00C0 FISICA SICURA.",
+          "(C) POSSONO fornire training aerobico in aggiunta al training resistivo, di equilibrio e di mobilit\u00E0 nel setting comunitario.",
+          "\u2500\u2500\u2500 LIMITE METODOLOGICO SEGNALATO \u2500\u2500\u2500",
+          "\u26A0\uFE0F Sull'esercizio DOMICILIARE non \u00E8 stata formulata alcuna raccomandazione: gli studi confrontavano interventi con 'cure usuali' mal definite, spesso simili all'intervento stesso, con confusione tra riabilitazione erogata e semplice istruzione a un programma domiciliare, e ampia variabilit\u00E0 nei tempi. Il gruppo ha ritenuto che l'evidenza non consentisse conclusioni.",
+          "\u26A0\uFE0F Evidenza insufficiente anche per una raccomandazione sul TREADMILL TRAINING."
+        ]
+      }
+    ]
+  },
+  {
+    id: 35,
+    category: "Anca",
+    color: "#1B4F8A",
+    icon: "\u{1F930}",
+    title: "Dolore del Cingolo Pelvico in Gravidanza \u2014 CPG 2017",
+    source: "Clinton et al. | J Womens Health Phys Ther 2017;41(2):102-125 | APTA Section on Women's Health + Orthopaedic Section",
+    pdfUrl: "https://journals.lww.com/jwphpt/fulltext/2017/05000/pelvic_girdle_pain_in_the_antepartum_population_.7.aspx",
+    pdfUrl2: "https://digitalcommons.andrews.edu/dscpt-capstone/1/",
+    tags: ["cingolo pelvico", "gravidanza", "PGP", "antepartum", "sacroiliaca", "cintura pelvica", "CPG"],
+    summary: "CPG sulla gestione fisioterapica del dolore del cingolo pelvico (PGP) nella donna in gravidanza. \u26A0\uFE0F Documento con base di evidenza LIMITATA: gli autori dichiarano esplicitamente la scarsit\u00E0 di prove, soprattutto sugli interventi. Le raccomandazioni pi\u00F9 forti riguardano fattori di rischio, diagnosi differenziale e misure di esito; quelle sugli interventi sono deboli o basate su evidenza conflittuale. Collocata sotto Anca per prossimit\u00E0 anatomica al complesso anca-bacino.",
+    sections: [
+      {
+        title: "Fattori di Rischio, Prognosi e Diagnosi",
+        content: [
+          "\u26A0\uFE0F NOTA SULLA COLLOCAZIONE: guida inserita nella sezione Anca per continuit\u00E0 clinica con il complesso anca-bacino, pur riguardando una popolazione e un ambito specialistico distinti.",
+          "\u2500\u2500\u2500 FATTORI DI RISCHIO (Grado A \u2014 evidenza forte) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO utilizzare i seguenti fattori di rischio nella prognosi del PGP: storia di gravidanze precedenti | disfunzioni ortopediche | indice di massa corporea aumentato | fumo | INSODDISFAZIONE LAVORATIVA | MANCANZA DI CONVINZIONE DI POTER MIGLIORARE.",
+          "\u2192 Due dei sei fattori con evidenza forte sono di natura psicosociale e occupazionale, non biomeccanica.",
+          "\u2500\u2500\u2500 POSTURA \u2014 RACCOMANDAZIONE NEGATIVA (Grado B) \u2500\u2500\u2500",
+          "\u26A0\uFE0F I clinici NON DEVONO considerare le ALTERAZIONI POSTURALI come indicative dello sviluppo e/o dell'intensit\u00E0 del PGP nella popolazione in gravidanza.",
+          "\u2192 \u00C8 una raccomandazione esplicitamente contraria a una pratica diffusa: l'iperlordosi e le modificazioni posturali della gravidanza non predicono il dolore.",
+          "\u2500\u2500\u2500 DECORSO CLINICO E PERSISTENZA \u2500\u2500\u2500",
+          "I clinici DOVREBBERO trattare con attenzione particolare le pazienti con: ESORDIO PRECOCE | SEDI DI DOLORE MULTIPLE | ELEVATO NUMERO DI TEST DI PROVOCAZIONE DEL DOLORE PELVICO POSITIVI | INSODDISFAZIONE LAVORATIVA | MANCANZA DI CONVINZIONE DI MIGLIORARE.",
+          "\u2192 Questi sono fattori da forti a moderati nel determinare il potenziale di PERSISTENZA del dolore nella gravidanza avanzata e nel postpartum.",
+          "\u2500\u2500\u2500 CLASSIFICAZIONE (Grado B) \u2500\u2500\u2500",
+          "I clinici POSSONO considerare l'utilizzo del sistema di classificazione per la diagnosi del TIPO di PGP nella popolazione in gravidanza.",
+          "\u2500\u2500\u2500 DIAGNOSI DIFFERENZIALE (Grado A \u2014 evidenza forte) \u2500\u2500\u2500",
+          "Il PGP DEVE essere differenziato da segni e sintomi di MALATTIA SERIA e da FATTORI PSICOLOGICI quando: i sintomi non sono coerenti con il decorso clinico descritto per il PGP, i deficit NON si stanno normalizzando, e i sintomi PEGGIORANO con disabilit\u00E0 crescente.",
+          "\u26A0\uFE0F COMORBIDIT\u00C0 DA CONSIDERARE ESPLICITAMENTE: OSTEOPOROSI TRANSITORIA e DIASTASI DEI RETTI ADDOMINALI.",
+          "DISFUNZIONI CONCOMITANTI DA VALUTARE: muscolatura del pavimento pelvico, anca, rachide lombare.",
+          "\u2500\u2500\u2500 IMAGING (Grado F \u2014 opinione esperta) \u2500\u2500\u2500",
+          "In assenza di buona evidenza, opinione esperta e scienze di base possono guidare l'uso degli studi di imaging."
+        ]
+      },
+      {
+        title: "Misure di Esito e Interventi",
+        content: [
+          "\u2500\u2500\u2500 MISURE DI ESITO (Grado A \u2014 evidenza forte) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO somministrare questionari auto-riferiti: DISABILITY RATING INDEX (DRI) | OSWESTRY DISABILITY INDEX (ODI) | PELVIC GIRDLE QUESTIONNAIRE (PGQ) | FEAR-AVOIDANCE BELIEFS QUESTIONNAIRE (FABQ) | PAIN CATASTROPHIZING SCALE (PCS).",
+          "\u2192 Queste scale sono utili per determinare disabilit\u00E0, funzione e CONVINZIONI SUL DOLORE al basale, e per misurarne il cambiamento nel decorso. Vanno usate IN COMBINAZIONE con l'esame clinico per la decisione clinica.",
+          "\u2192 Due delle cinque misure raccomandate (FABQ e PCS) riguardano paura-evitamento e catastrofizzazione: coerente con il peso dei fattori psicosociali tra i fattori di rischio.",
+          "\u2500\u2500\u2500 EQUILIBRIO E RISCHIO DI CADUTA (Grado E) \u2500\u2500\u2500",
+          "\u26A0\uFE0F Esiste EVIDENZA FORTE di un ALTO RISCHIO DI CADUTE in questa popolazione, ma NESSUNA misura \u00E8 stata validata per valutare oggettivamente equilibrio dinamico e rischio di caduta nella donna in gravidanza.",
+          "\u2192 \u00C8 una lacuna dichiarata: il rischio esiste, gli strumenti per quantificarlo no.",
+          "\u2500\u2500\u2500 CINTURA PELVICA DI SUPPORTO (Grado D \u2014 evidenza conflittuale) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO CONSIDERARE l'applicazione di una cintura di supporto nelle donne in gravidanza con PGP.",
+          "\u26A0\uFE0F I 4 studi esaminati indagavano popolazioni diverse, con gruppi di intervento e controllo eterogenei, durate di applicazione differenti e follow-up a tempi diversi. Servono ulteriori ricerche per chiarire applicazione iniziale, durata e quale sottogruppo di pazienti ne benefici.",
+          "\u2500\u2500\u2500 ESERCIZIO (Grado D \u2014 evidenza conflittuale) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO CONSIDERARE l'uso dell'esercizio nella donna in gravidanza con PGP.",
+          "RAZIONALE: l'American College of Obstetricians and Gynecologists e le linee guida canadesi raccomandano l'esercizio per i benefici sulla salute, per il basso rischio e i minimi effetti avversi nella popolazione in gravidanza.",
+          "\u26A0\uFE0F LIMITE: le 2 revisioni sistematiche e gli RCT recenti erano NON SPECIFICI nell'applicazione dell'esercizio, con gruppi eterogenei che mescolavano lombalgia gravidica e PGP, popolazioni sia in gravidanza precoce sia avanzata, e interventi molto diversi tra loro.",
+          "\u2192 In sostanza: l'esercizio si raccomanda perch\u00E9 sicuro e utile alla salute generale, non perch\u00E9 esista una prova solida di efficacia specifica sul PGP.",
+          "\u2500\u2500\u2500 TERAPIA MANUALE (Grado C \u2014 evidenza debole) \u2500\u2500\u2500",
+          "I clinici POSSONO oppure NON POSSONO utilizzare tecniche di terapia manuale, incluse le manipolazioni ad alta velocit\u00E0 e bassa ampiezza, per il trattamento di lombalgia gravidica e PGP.",
+          "\u2192 L'evidenza \u00E8 emergente e il trattamento pu\u00F2 essere considerato, dato che NON sono riportati effetti avversi rilevanti nella donna in gravidanza sana.",
+          "\u2500\u2500\u2500 VALUTAZIONE COMPLESSIVA DEL DOCUMENTO \u2500\u2500\u2500",
+          "\u26A0\uFE0F Gli autori dichiarano esplicitamente che l'organizzazione e la classificazione del documento servono anche a ORIENTARE LA RICERCA per colmare la scarsit\u00E0 di evidenza, specialmente sugli interventi.",
+          "\u2192 Le raccomandazioni pi\u00F9 solide di questa CPG riguardano COSA VALUTARE (fattori di rischio, diagnosi differenziale, misure di esito), non COSA FARE. Sugli interventi, tutte le raccomandazioni sono di grado C o D.",
+          "\u26A0\uFE0F PER APPROFONDIRE: chi lavora regolarmente con questa popolazione dovrebbe integrare con linee guida ostetriche e con documenti pi\u00F9 recenti, dato che la CPG risale al 2017."
+        ]
+      }
+    ]
+  },
+  {
+    id: 36,
+    category: "Salute Occupazionale",
+    color: "#5A5A2E",
+    icon: "\u{1F477}",
+    title: "Ottimizzare la Partecipazione al Lavoro dopo Infortunio o Malattia \u2014 CPG 2021",
+    source: "Daley et al. | JOSPT 2021;51(8):CPG1-CPG102 | APTA Orthopedics",
+    pdfUrl: "https://www.jospt.org/doi/10.2519/jospt.2021.0303",
+    pdfUrl2: "https://www.orthopt.org/content/s/clinical-guidance-to-optimize-work-participation-after-injury-or-illness-the-role-of-physical-therapists-2021",
+    tags: ["ritorno al lavoro", "RTW", "riabilitazione occupazionale", "biopsicosociale", "alleanza terapeutica", "fear-avoidance", "CPG"],
+    summary: "CPG sulla riabilitazione occupazionale: assistere il lavoratore a rimanere al lavoro o a rientrarvi in modo sicuro e produttivo, limitando l'impatto negativo di restrizioni lavorative, disoccupazione e disabilit\u00E0 lavorativa. Il documento contiene 26 raccomandazioni su diagnosi/classificazione, decorso clinico, fattori di rischio, esame e interventi. \u26A0\uFE0F SCHEDA PARZIALE: ricostruita da sintesi secondarie affidabili e non dal documento integrale, che non \u00E8 liberamente accessibile. Riporta circa 10 delle 26 raccomandazioni.",
+    sections: [
+      {
+        title: "Inquadramento e Avvertenza sulla Completezza",
+        content: [
+          "\u26A0\uFE0F AVVERTENZA: questa scheda \u00E8 stata costruita a partire da sintesi secondarie affidabili (JOSPT Perspectives for Practice e riassunti professionali della CPG) perch\u00E9 il documento integrale non risulta liberamente accessibile. Riporta circa 10 delle 26 raccomandazioni, con formulazioni fedeli ma non verificate sul testo originale. Per l'uso in ambito medico-legale o per decisioni su casi complessi consultare il documento completo tramite i link qui sopra.",
+          "DEFINIZIONE: la riabilitazione occupazionale \u00E8 il processo di assistere i lavoratori a RIMANERE al lavoro o a RIENTRARVI in modo sicuro e produttivo, limitando l'impatto negativo di restrizioni lavorative, disoccupazione e disabilit\u00E0 lavorativa.",
+          "STRUTTURA: 26 raccomandazioni distribuite su 5 ambiti \u2014 diagnosi e classificazione, decorso clinico, fattori di rischio, esame, interventi.",
+          "BASE DI EVIDENZA: letteratura scientifica pubblicata tra gennaio 1999 e agosto 2020.",
+          "\u2500\u2500\u2500 DIMENSIONE DEL PROBLEMA (dati Stati Uniti) \u2500\u2500\u2500",
+          "Oltre 2.8 milioni di infortuni e malattie professionali non fatali nel 2018, di cui 1.6 milioni con assenza dal lavoro o trasferimento o restrizione di mansione.",
+          "105 milioni di giornate di lavoro perse in un anno, con un onere economico stimato di 170.8 miliardi di dollari.",
+          "\u2500\u2500\u2500 RUOLO E TEMPISTICA DEL FISIOTERAPISTA \u2500\u2500\u2500",
+          "Il fisioterapista PU\u00D2 essere il primo professionista sanitario di riferimento fino a 8 settimane dall'infortunio, secondo l'ambito normativo e la propria competenza, con consultazione iniziale entro i primi 7 GIORNI dall'infortunio.",
+          "\u26A0\uFE0F La VALUTAZIONE MULTIDISCIPLINARE \u00E8 indicata a 6-8 SETTIMANE dall'infortunio.",
+          "\u2192 Sono due riferimenti temporali operativi: intervento precoce entro una settimana, e soglia delle 6-8 settimane come momento in cui il caso va portato al team."
+        ]
+      },
+      {
+        title: "Fattori di Rischio, Esame e Interventi",
+        content: [
+          "\u2500\u2500\u2500 SCREENING DEI FATTORI DI RISCHIO \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO effettuare screening dei fattori di rischio associati a ritardo del rientro o ad assenza dal lavoro LUNGO TUTTO l'episodio di cura, usando intervista e strumenti validati.",
+          "FATTORI DI RISCHIO: tipo di infortunio | episodi di infortunio precedenti | assenza dal lavoro prolungata PRIMA dell'invio | comorbidit\u00E0 | fattori psicosociali \u2014 elevati livelli di disabilit\u00E0 funzionale percepita o auto-riferita, severit\u00E0 del dolore, comportamenti di dolore, CONVINZIONI DI PAURA-EVITAMENTO, BASSE ASPETTATIVE DI RECUPERO, BASSA AUTOEFFICACIA.",
+          "\u2192 Esiste evidenza FORTE che convinzioni, percezioni e motivazioni del paziente rispetto all'infortunio e al rientro influenzino il decorso e i tempi di recupero.",
+          "\u2500\u2500\u2500 MISURE DI ESITO \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO usare, alla valutazione iniziale, misure auto-riferite validate che affrontino SPECIFICAMENTE il ritorno al lavoro \u2014 come il WORK ABILITY INDEX (WAI) e la SOTTOSCALA LAVORO DEL DASH \u2014 per stimare gli esiti di rientro e orientare il trattamento.",
+          "\u2192 Punteggi scadenti vanno interpretati come FATTORE PROGNOSTICO COMPLICANTE per il rientro, e vanno comunicati agli altri portatori di interesse come possibile causa di ritardo.",
+          "I fisioterapisti DOVREBBERO somministrare strumenti affidabili e validi, come parte della valutazione E LUNGO IL TRATTAMENTO, per identificare paura-evitamento, rischio psicosociale o disponibilit\u00E0 al cambiamento. Esempi: Fear-Avoidance Beliefs Questionnaire, Work and Health Questionnaire.",
+          "\u2500\u2500\u2500 VALUTAZIONE DEL CONTESTO LAVORATIVO \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO valutare le RICHIESTE del lavoro, i fattori psicosociali lavoro-correlati e le POLITICHE AZIENDALI sulla disponibilit\u00E0 di mansioni transitorie o modificate, per identificare barriere al rientro e informare il piano di trattamento.",
+          "\u26A0\uFE0F Il fattore lavoro-correlato pi\u00F9 CONSISTENTE di ritardo del rientro \u00E8 la RICHIESTA FISICA e il TIPO di lavoro che il lavoratore dovr\u00E0 riprendere.",
+          "\u2192 La risposta del datore di lavoro all'infortunio \u2014 disponibilit\u00E0 di programmi di rientro, mansioni modificate, adattamenti ergonomici \u2014 funge da facilitatore o da barriera agli esiti.",
+          "\u2500\u2500\u2500 ALLEANZA TERAPEUTICA \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO sviluppare un'alleanza terapeutica includendo il lavoratore nella PIANIFICAZIONE del rientro e adottando comportamenti di supporto orientati al lavoro lungo tutto l'episodio di cura, documentando e affrontando obiettivi, preferenze e preoccupazioni del lavoratore.",
+          "COMPONENTI DELL'ALLEANZA: accordo terapista-paziente sugli obiettivi | accordo sugli interventi | legame affettivo tra i due.",
+          "INTERAZIONI DI SUPPORTO: rispettare il lavoratore e presumerne la legittimit\u00E0 | comunicazione ed educazione continue | minimizzare l'intrusione del sistema nella relazione | EVITARE pregiudizio, stigma, stereotipi e ostilit\u00E0.",
+          "\u2192 Evidenza MODERATA che l'esperienza riabilitativa del lavoratore con i professionisti sanitari influenzi la traiettoria di rientro.",
+          "\u2500\u2500\u2500 COMUNICAZIONE E COORDINAMENTO \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO comunicare e coordinare i servizi con datore di lavoro, lavoratore, case manager e professionisti sanitari IN PRESENZA di un rischio stimato ELEVATO di ritardo del rientro.",
+          "\u26A0\uFE0F PRECISAZIONE IMPORTANTE: nei lavoratori con rischio stimato BASSO di ritardo, la gestione multidisciplinare del caso NON \u00E8 risultata benefica nel promuovere il rientro. Il coordinamento intensivo va riservato ai casi a rischio.",
+          "\u2500\u2500\u2500 MANSIONI GRADUATE E MODIFICATE \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO fornire consulenza e raccomandazioni a pazienti, datori di lavoro e team sanitario per mansioni GRADUATE, MODIFICATE o TRANSITORIE che promuovano il reinserimento, tenendo conto di controindicazioni e barriere.",
+          "\u2192 Evidenza da moderata a forte a favore delle strategie di lavoro graduato o modificato nel RIDURRE la durata dell'assenza rispetto alle cure usuali, con miglior coping del lavoratore.",
+          "\u2500\u2500\u2500 PRATICA PSICOLOGICAMENTE INFORMATA \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO incorporare nel piano di cura pratiche psicologicamente informate QUANDO sono identificate barriere psicosociali: definizione individuale degli obiettivi, COLLOQUIO MOTIVAZIONALE, educazione al pacing dell'attivit\u00E0, problem solving, rilassamento e tecniche di coping.",
+          "\u26A0\uFE0F Questi interventi devono essere DIRETTI ALLA BARRIERA SPECIFICA identificata, non applicati genericamente.",
+          "\u2500\u2500\u2500 DUE RACCOMANDAZIONI NEGATIVE \u2500\u2500\u2500",
+          "\u26A0\uFE0F ESERCIZIO LEGGERO: i fisioterapisti NON DEVONO usare l'esercizio leggero come INTERVENTO ISOLATO per gli obiettivi di rientro al lavoro, salvo motivazione esplicita documentata \u2014 coinvolgimento psicosociale o psicologico, infortunio catastrofico, linee guida condizione-specifiche o post-chirurgiche.",
+          "\u2192 Vanno implementate ATTIVIT\u00C0 FUNZIONALI CHE RIPRODUCONO le mansioni essenziali del posto di lavoro, progredendo secondo principi di sovraccarico, richieste specifiche del lavoro e integrazione con il sito lavorativo.",
+          "\u26A0\uFE0F EDUCAZIONE ISOLATA: i fisioterapisti NON DEVONO affidarsi esclusivamente a materiale scritto o a educazione di gruppo per migliorare le capacit\u00E0 lavorative e limitare il tempo di assenza.",
+          "\u2192 Esiste evidenza FORTE che l'educazione NON sia benefica per il rientro al lavoro quando usata in via esclusiva. Va combinata con altri interventi attivi."
+        ]
+      }
+    ]
+  },
+  {
+    id: 37,
+    category: "Spalla",
+    color: "#5C3A8C",
+    icon: "\u{1F4A5}",
+    title: "Lussazione Anteriore Traumatica Primaria di Spalla \u2014 Linea Guida Multidisciplinare 2026",
+    source: "van Gastel et al. | Acta Orthop 2026;97:531-537 | Dutch Society for Surgery (NVvH) + Federation of Medical Specialists",
+    pdfUrl: "https://www.actaorthop.org/actao/article/view/46434",
+    tags: ["spalla", "lussazione", "instabilit\u00E0", "riduzione", "Bankart", "recidiva", "kinesiofobia", "GRADE"],
+    summary: "Linea guida multidisciplinare olandese 2026 per diagnosi e gestione della lussazione anteriore traumatica PRIMARIA di spalla. Sviluppata da un comitato con ortopedici, radiologi, medici d'urgenza, FISIOTERAPISTI, un epidemiologo e rappresentanti dei pazienti. Copre sette ambiti dalla diagnostica alla stabilizzazione chirurgica primaria. \u26A0\uFE0F Gran parte delle raccomandazioni poggia su evidenza da molto bassa a opinione esperta: la ricerca sistematica su gestione del dolore durante la riduzione e su fisioterapia non ha prodotto alcuno studio eleggibile.",
+    sections: [
+      {
+        title: "Le Sette Raccomandazioni con i Rispettivi GRADE",
+        content: [
+          "\u26A0\uFE0F Questa linea guida usa il sistema GRADE (alta, moderata, bassa, molto bassa confidenza nella stima dell'effetto), diverso dal sistema APTA a lettere usato dalla maggior parte delle altre guide di questa app. Vedi la scheda 'Come Leggere i Gradi di Raccomandazione'.",
+          "\u2500\u2500\u2500 1. VALUTAZIONE DIAGNOSTICA \u2500\u2500\u2500",
+          "Nei pazienti con lussazione traumatica: radiografia standard in ALMENO 2 PROIEZIONI ORTOGONALI, preferibilmente sia PRIMA sia DOPO la riduzione. Se persiste incertezza diagnostica si raccomanda la TC. L'ECOGRAFIA NON deve essere considerata un sostituto della radiografia convenzionale.",
+          "GRADE: opinione esperta. Non \u00E8 stata condotta una ricerca sistematica della letteratura.",
+          "\u2500\u2500\u2500 2. TECNICA DI RIDUZIONE \u2500\u2500\u2500",
+          "Scegliere una tecnica con cui si sia acquisita esperienza sufficiente. Come PRIMA tecnica si consiglia quella BIOMECCANICA.",
+          "GRADE: livello di evidenza molto basso.",
+          "\u2500\u2500\u2500 3. GESTIONE DEL DOLORE DURANTE LA RIDUZIONE \u2500\u2500\u2500",
+          "Discutere con il paziente le diverse tecniche antalgiche. Se la riduzione non riesce, la sedazione procedurale con analgesia (PSA) \u00E8 la tecnica di prima scelta.",
+          "GRADE: opinione esperta. \u00C8 stata condotta una revisione completa della letteratura, ma NESSUNO studio soddisfaceva i criteri di ricerca stabiliti.",
+          "\u2500\u2500\u2500 4. IMMOBILIZZAZIONE \u2500\u2500\u2500",
+          "Consigliare al paziente l'uso del reggibraccio AL BISOGNO PER 1 SETTIMANA.",
+          "GRADE: livello di evidenza molto basso.",
+          "\u2500\u2500\u2500 5. FISIOTERAPIA \u2500\u2500\u2500",
+          "Discutere le opzioni per il ripristino PRECOCE della funzione della cuffia dei rotatori, della coordinazione e della propriocezione. Se il recupero \u00E8 inadeguato, inviare all'ortopedico. In caso di KINESIOFOBIA, considerare un programma riabilitativo interdisciplinare.",
+          "GRADE: opinione esperta. \u00C8 stata condotta una revisione completa della letteratura, ma NESSUNO studio soddisfaceva i criteri di ricerca stabiliti.",
+          "\u2500\u2500\u2500 6. FATTORI DI RISCHIO DI RECIDIVA \u2500\u2500\u2500",
+          "Sesso maschile ed et\u00E0 inferiore a 40 anni sono fattori di rischio per la ri-lussazione.",
+          "GRADE: \u00E8 stata condotta una revisione completa della letteratura, ma gli studi non hanno potuto essere valutati con il sistema GRADE.",
+          "\u2500\u2500\u2500 7. STABILIZZAZIONE CHIRURGICA PRIMARIA \u2500\u2500\u2500",
+          "Per decisione condivisa, discutere l'intervento chirurgico in presenza di: et\u00E0 inferiore a 40 anni, atleta di contatto, perdita ossea significativa.",
+          "GRADE: livello di evidenza da molto basso a moderato."
+        ]
+      },
+      {
+        title: "Diagnostica, Riduzione e Immobilizzazione",
+        content: [
+          "\u2500\u2500\u2500 IMAGING \u2500\u2500\u2500",
+          "Le radiografie servono a tre scopi: confermare la diagnosi, determinare il successo della riduzione e identificare eventuali fratture, incluse quelle iatrogene.",
+          "PROIEZIONI: nella maggioranza dei casi almeno due, tipicamente antero-posteriore e scapolare. La proiezione AP consente una valutazione completa delle anomalie di spalla e rileva fino all'88% di tutte le alterazioni post-traumatiche.",
+          "PROIEZIONE A Y SCAPOLARE: orientata sulla formazione a Y di scapola, acromion e coracoide; facilita la visualizzazione di una lussazione anteriore o posteriore se l'omero prossimale non si proietta sulla glena. Vantaggio pratico: \u00E8 relativamente facile da ottenere in caso di lussazione.",
+          "\u26A0\uFE0F ECOGRAFIA: in uno studio prospettico su 65 pazienti mostra sensibilit\u00E0 e specificit\u00E0 del 100% (IC 95%: 87-100) per la lussazione, MA \u00E8 inadeguata per le fratture concomitanti: il 48% di tutte le fratture NON \u00E8 stato rilevato.",
+          "\u26A0\uFE0F DATO CHE GIUSTIFICA LA RADIOGRAFIA POST-RIDUZIONE: il 15% delle fratture rilevate all'imaging dopo la riduzione NON era visibile nelle radiografie pre-riduzione.",
+          "LESIONI ASSOCIATE FREQUENTI: lesioni di Hill-Sachs, lesioni glenoidee, fratture (anche iatrogene) di grande e piccola tuberosit\u00E0, testa e collo omerale. Possibili anche deficit neurologici e lesioni della cuffia; il danno vascolare resta una complicanza rara.",
+          "\u26A0\uFE0F Lesioni della cuffia sono state riscontrate in PI\u00D9 DELLA MET\u00C0 delle spalle lussate.",
+          "\u2500\u2500\u2500 LE TRE TECNICHE DI RIDUZIONE \u2500\u2500\u2500",
+          "TRAZIONE: si applica una forza longitudinale all'omero per attenuare lo spasmo muscolare e facilitare il riposizionamento della testa omerale.",
+          "LEVA: si combinano trazione e forze di leva per manipolare la testa omerale riportandola nella fossa glenoidea.",
+          "BIOMECCANICA O SCAPOLARE (raccomandata come prima scelta): mira a posizionare la fossa glenoidea in modo che la testa omerale possa ricadere in sede. Il paziente viene posto PRONO, si applica trazione verso il basso sul braccio flesso a 90 gradi, quindi si esercita pressione mediale e verso l'alto sull'angolo inferiore della scapola.",
+          "\u2192 Le tre tecniche sono quasi ugualmente efficaci, con complicanze minime e differenze di dolore percepito modeste. La scelta della biomeccanica come prima opzione \u00E8 dichiarata dagli autori come opinione del comitato.",
+          "CHI ESEGUE: la riduzione \u00E8 condotta o supervisionata da medico d'urgenza, ortopedico o chirurgo traumatologo. Se il primo tentativo fallisce si esegue una TC per escludere complicanze, poi si tenta nuovamente. Raramente serve la riduzione in sala operatoria o a cielo aperto.",
+          "\u2500\u2500\u2500 IMMOBILIZZAZIONE \u2014 DATO OPERATIVO \u2500\u2500\u2500",
+          "In un RCT che confrontava il reggibraccio AL BISOGNO PER 1 SETTIMANA con un'immobilizzazione prolungata di 3-4 settimane, a 2 anni di follow-up NON \u00E8 stata trovata alcuna differenza clinicamente rilevante.",
+          "\u2192 CONCLUSIONE DEGLI AUTORI: l'immobilizzazione stretta appare NON NECESSARIA. Dopo la breve fase di immobilizzazione la fisioterapia pu\u00F2 iniziare e l'attivit\u00E0 essere gradualmente incrementata.",
+          "\u26A0\uFE0F FRATTURE IATROGENE: complicanza della riduzione chiusa, osservata soprattutto nei pazienti oltre i 40 anni e prevalentemente in donne con frattura concomitante della grande tuberosit\u00E0."
+        ]
+      },
+      {
+        title: "Fisioterapia \u2014 Cosa Dice e Cosa Non Dice",
+        content: [
+          "\u26A0\uFE0F PREMESSA METODOLOGICA: su questo capitolo \u00E8 stata condotta una revisione sistematica della letteratura che NON ha prodotto alcuno studio eleggibile. Le indicazioni che seguono sono quindi OPINIONE DEL COMITATO, non evidenza. Vanno lette come impostazione ragionata, non come prescrizione dimostrata.",
+          "\u2500\u2500\u2500 PERCORSO PROPOSTO \u2500\u2500\u2500",
+          "GUIDA INIZIALE: fornita gi\u00E0 in pronto soccorso, dove il paziente riceve tipicamente un foglio informativo con esercizi per attivare la muscolatura di spalla e favorire un recupero precoce ed efficace.",
+          "AVVIO: dopo il breve periodo di immobilizzazione la riabilitazione pu\u00F2 cominciare e, a seconda dei fattori fisici e psicosociali individuali, durare FINO A 6 MESI.",
+          "\u2500\u2500\u2500 RAZIONALE FISIOPATOLOGICO \u2500\u2500\u2500",
+          "Dopo una lussazione anteriore traumatica primaria, l'interruzione del complesso capsulo-labrale pu\u00F2 compromettere la PROPRIOCEZIONE gleno-omerale, condurre a pattern di movimento maladattativi e causare dolore.",
+          "\u2192 Sono quindi giustificati l'attivazione e il reclutamento PRECOCI dei recettori meccanici, della cuffia dei rotatori e dei muscoli della catena cinetica.",
+          "\u26A0\uFE0F PRIORIT\u00C0 ESPLICITA: il focus primario \u00E8 su COORDINAZIONE E PROPRIOCEZIONE, non sulla forza.",
+          "\u2500\u2500\u2500 QUANDO INVIARE \u2500\u2500\u2500",
+          "Se il trattamento non chirurgico non d\u00E0 risultati, va considerato l'invio a un ortopedico esperto in lussazioni di spalla per una possibile gestione operatoria.",
+          "\u2500\u2500\u2500 KINESIOFOBIA \u2500\u2500\u2500",
+          "Nei pazienti che manifestano PAURA DI RI-LUSSAZIONE, o kinesiofobia, tale da incidere su attivit\u00E0 quotidiane, lavoro o sport, pu\u00F2 essere considerato un PROGRAMMA RIABILITATIVO INTERDISCIPLINARE.",
+          "\u2192 \u00C8 uno dei pochi punti in cui la linea guida indica esplicitamente un percorso dedicato per la componente psicologica.",
+          "\u2500\u2500\u2500 DANNO NEUROLOGICO \u2500\u2500\u2500",
+          "\u26A0\uFE0F Le lussazioni di spalla comportano un rischio considerevole di danno neurologico di qualche entit\u00E0.",
+          "In questi casi \u00E8 importante un programma fisioterapico assiduo per MANTENERE IL ROM finch\u00E9 la forza muscolare non venga recuperata e la funzione di spalla ripristinata: un processo che richiede da 12 a 45 SETTIMANE."
+        ]
+      },
+      {
+        title: "Recidiva e Indicazione Chirurgica",
+        content: [
+          "\u2500\u2500\u2500 FATTORI DI RISCHIO INTRINSECI \u2500\u2500\u2500",
+          "Fattori con associazione significativa a instabilit\u00E0, lussazione recidivante o necessit\u00E0 di chirurgia secondaria: ET\u00C0, SESSO, IPERLASSIT\u00C0 e FRATTURE DELLA GRANDE TUBEROSIT\u00C0.",
+          "\u26A0\uFE0F ENTIT\u00C0 DEL RISCHIO: essere maschio si associa a un aumento di 3 VOLTE; avere meno di 40 anni a un aumento di 13 VOLTE.",
+          "\u26A0\uFE0F CONTRO-INTUITIVO: la lussazione-frattura della GRANDE TUBEROSIT\u00C0 mostra un'associazione NEGATIVA con l'instabilit\u00E0, rendendo la recidiva MENO probabile.",
+          "Le lesioni glenoidee e di Hill-Sachs mostrano un'associazione AMBIGUA con l'instabilit\u00E0 recidivante dopo lussazione primaria.",
+          "\u2500\u2500\u2500 FATTORI DI RISCHIO ESTRINSECI \u2500\u2500\u2500",
+          "Sport di collisione | superficie di gioco | occupazioni che comportano lavoro AL DI SOPRA DELL'ALTEZZA DELLA SPALLA.",
+          "\u2500\u2500\u2500 RECIDIVA PER FASCIA D'ET\u00C0 E SESSO (N = 21.927) \u2500\u2500\u2500",
+          "Formato: fascia d'et\u00E0 | donne | uomini",
+          "0-9 anni | 2.7% | 1.6%",
+          "10-19 anni | 19% | 29%",
+          "20-29 anni | 19% | 28%",
+          "30-39 anni | 13% | 15%",
+          "40-49 anni | 12% | 12%",
+          "50-59 anni | 9.0% | 15%",
+          "60-69 anni | 9.6% | 12%",
+          "70-79 anni | 9.5% | 12%",
+          "80-89 anni | 7.1% | 9.3%",
+          "TOTALE | 10% | 19%",
+          "\u2192 Il picco \u00E8 netto nella seconda e terza decade, con divario di sesso massimo proprio in quelle fasce: circa 10 punti percentuali.",
+          "\u2500\u2500\u2500 CHIRURGIA CONTRO CONSERVATIVO \u2014 I DATI \u2500\u2500\u2500",
+          "Meta-analisi di 2 RCT su riparazione dei tessuti molli, con follow-up minimo di 2 anni.",
+          "\u26A0\uFE0F RECIDIVA: 8.9% nel gruppo chirurgico contro 49% nel gruppo non operatorio. Rischio relativo aggregato 0.2, a favore del trattamento chirurgico.",
+          "TEST DI APPRENSIONE positivo a 2 anni: 4.7% nel gruppo chirurgico contro 7.9% nel non operatorio, differenza NON significativa.",
+          "\u26A0\uFE0F RITORNO ALLO SPORT a minimo 2 anni: 90% nel gruppo chirurgico contro 62% nel gruppo non operatorio.",
+          "ESITI RIFERITI DAL PAZIENTE E ROM: le differenze tra gruppi NON sono state considerate clinicamente rilevanti.",
+          "COMPLICANZE: gli RCT riportano nessuna complicanza oltre alle recidive, tranne un singolo caso di capsulite adesiva a 3 mesi dalla riparazione di Bankart.",
+          "NUMBER NEEDED TO TREAT: 3 per lussazione e instabilit\u00E0, nei pazienti senza evidenza radiografica di lussazione sottoposti a riparazione artroscopica di Bankart dopo lussazione primaria.",
+          "\u26A0\uFE0F Nessuno studio sugli esiti delle procedure di augmentation ossea \u00E8 risultato eleggibile per l'inclusione.",
+          "\u2500\u2500\u2500 LIMITI DICHIARATI DAGLI AUTORI \u2500\u2500\u2500",
+          "Le raccomandazioni sulla diagnostica primaria si basano ESCLUSIVAMENTE su opinione esperta e costituiscono una panoramica narrativa delle opzioni diagnostiche.",
+          "Per gestione del dolore durante la riduzione e per fisioterapia nessuno studio \u00E8 risultato eleggibile: le raccomandazioni sono quindi in larga parte opinione esperta.",
+          "Tecnica di riduzione, immobilizzazione e stabilizzazione chirurgica primaria si basano su revisione sistematica, ma il livello di evidenza degli studi inclusi va da MOLTO BASSO a MODERATO.",
+          "\u26A0\uFE0F Ulteriore limite dichiarato: sono stati esclusi dal comitato i pazienti con esperienza diretta di lussazione traumatica primaria di spalla."
+        ]
+      },
+      {
+        title: "Protocollo Riabilitativo in 3 Fasi \u2014 Criterion-Based",
+        content: [
+          "FONTE: Anterior Glenohumeral Dislocation Rehabilitation Guideline. \u26A0\uFE0F Protocollo riabilitativo criterion-based, NON una linea guida con gradi di evidenza. Integra la linea guida olandese 2026 riportata nelle sezioni precedenti fornendo la progressione operativa che quella, per scelta metodologica, non specifica.",
+          "IMPOSTAZIONE: le tempistiche e il numero di sedute di ogni fase VARIANO secondo caratteristiche del paziente, obiettivi e progressione individuale. Il passaggio di fase avviene per CRITERI RAGGIUNTI, non per tempo trascorso.",
+          "MECCANISMO TIPICO: abduzione e rotazione esterna forzate di spalla su braccio esteso.",
+          "GUARIGIONE ATTESA: 6 o pi\u00F9 settimane.",
+          "\u2500\u2500\u2500 PRECAUZIONI IMMEDIATE \u2500\u2500\u2500",
+          "\u26A0\uFE0F Proteggere la capsula articolare ANTERIORE",
+          "\u26A0\uFE0F Evitare di spingere in ROTAZIONE ESTERNA e ABDUZIONE ORIZZONTALE",
+          "\u26A0\uFE0F Evitare rotazione esterna A O SOPRA i 90\u00B0 di abduzione",
+          "\u26A0\uFE0F Evitare estensione di spalla OLTRE LA POSIZIONE NEUTRA",
+          "\u26A0\uFE0F Evitare forze di TRAZIONE sulla gleno-omerale",
+          "\u26A0\uFE0F Nessun movimento precoce per 0-2 settimane; controllare gli stress per le prime 2-4 settimane",
+          "PATOLOGIE ASSOCIATE DA CONSIDERARE: frattura omerale (lesione di Hill-Sachs) | lesione labrale (lesione di Bankart) | lesione della cuffia dei rotatori | coinvolgimento nervoso (nervo ascellare, plesso brachiale) | coinvolgimento vascolare (arteria ascellare).",
+          "\u2500\u2500\u2500 FASE I \u2014 ACUTA (settimane 0-3, 1-4 sedute attese) \u2500\u2500\u2500",
+          "OBIETTIVI: ridurre dolore, infiammazione e difesa muscolare | proteggere la capsula anteriore | minimizzare gli effetti negativi dell'immobilizzazione (atrofia, ridotto reclutamento neuromuscolare, perdita di ROM) | migliorare flessibilit\u00E0 e ROM | migliorare controllo muscolare, attivazione e propriocezione.",
+          "ROM: passivo indolore nel PIANO DELLA SCAPOLA (posizione 30:30) | progressione ad attivo-assistito in rotazione interna, esterna e flessione | progressione verso attivo secondo tolleranza, iniziando nel piano scapolare | movimento del segmento prossimale sul distale in quadrupedia per aumentare la stabilit\u00E0.",
+          "TERAPIA MANUALE: mobilizzazioni articolari POSTERIORI di grado I-II per il controllo del dolore, nel piano scapolare.",
+          "RINFORZO CUFFIA: NMES per l'attivazione se necessario | isometriche submassimali indolori a partire da 0\u00B0 di abduzione | rotazione interna ed esterna multiangolo da neutro a piena intrarotazione secondo tolleranza | flessione ed estensione in neutro, con braccio NON dietro il corpo (0-30\u00B0 di flessione).",
+          "RINFORZO AVAMBRACCIO E GOMITO: isometriche submassimali di flessione ed estensione, progressione a isotoniche secondo tolleranza.",
+          "RINFORZO SCAPOLARE: dentato anteriore (supine punch con progressione a resistenza manuale, wall slide sotto i 120\u00B0) | trapezio inferiore e romboidi (retrazione scapolare progredendo a rematori con gomiti NON dietro il corpo).",
+          "STABILIT\u00C0 E PROPRIOCEZIONE: weight shift in catena chiusa su piano d'appoggio, antero-posteriori e medio-laterali | stabilizzazioni ritmiche | rotazione interna ed esterna supina a 30\u00B0 nel piano scapolare | rotazione esterna in decubito laterale a 0\u00B0 di abduzione.",
+          "STRETCHING (frequente e gentile): adduzione orizzontale gentile a 90\u00B0 con eventuale stabilizzazione scapolare | sleeper stretch \u2014 \u26A0\uFE0F senza forzare | stretching in estensione di gomito.",
+          "\u2705 CRITERI PER AVANZARE: dolore o infiammazione minimi | stabilit\u00E0 statica di spalla | controllo neuromuscolare sufficiente SOTTO I 100\u00B0.",
+          "\u2500\u2500\u2500 FASE II \u2014 INTERMEDIA (settimane 3-5, 2-4 sedute attese) \u2500\u2500\u2500",
+          "\u26A0\uFE0F ISTRUZIONE SPECIFICA: nessun sollevamento di carichi sopra la testa.",
+          "ROM: progressione al fine corsa indolore secondo tolleranza | lavoro progressivo sulla rotazione esterna dalla posizione 30-30 fino alla 90-90 nel corso della fase.",
+          "RINFORZO CUFFIA: rotazione interna ed esterna 30-30 progredendo a 90-90 a fine fase o inizio fase successiva | pattern PNF D1 e D2 con elastico.",
+          "STABILIT\u00C0 SCAPOLARE: protrazione | push-up al muro con plus progredendo a push-up a terra con plus \u2014 \u26A0\uFE0F attenzione alla discinesia scapolare, evitare estensione oltre il piano del corpo | dynamic scapular hug | retrazione scapolare non oltre il piano del corpo | progressione ad abduzione orizzontale prona | rematori fino al piano del corpo progredendo a ROM completo.",
+          "PROGRESSIONE ROTAZIONE ESTERNA: 45\u00B0 di abduzione, poi 60\u00B0, poi 90\u00B0 nel corso delle due fasi successive | scaption fino a 110\u00B0 | piani variabili.",
+          "CATENA CHIUSA: weight shift progredendo a quadrupedia, range fino a 120\u00B0 di flessione | catena aperta con palla al muro, occhi aperti e occhi chiusi.",
+          "CORE: progressioni di plank | training addominale profondo | attivit\u00E0 prone su fitball.",
+          "ARTI INFERIORI: appoggio monopodalico aggiunto agli esercizi in piedi | squat o split stance combinati con attivit\u00E0 dell'arto superiore.",
+          "PROGRESSIONE DEL CARICO nelle due fasi successive: da 15-18 ripetizioni verso 10-12 aumentando la resistenza | dalla posizione 30-30 alla 90-90 | introduzione del lavoro ECCENTRICO.",
+          "ALTRE ATTIVIT\u00C0: pu\u00F2 essere iniziato un programma di corsa.",
+          "\u2705 CRITERI PER AVANZARE: ROM completo e indolore, simmetrico al lato sano | ASSENZA DI APPRENSIONE.",
+          "OBIETTIVO INTERMEDIO DA RAGGIUNGERE: equilibrio muscolare tra intra ed extrarotazione con ER pari al 75% della IR.",
+          "\u2500\u2500\u2500 FASE III \u2014 RINFORZO AVANZATO (dalla settimana 6, 4-9 sedute attese) \u2500\u2500\u2500",
+          "\u26A0\uFE0F Alcuni esercizi possono non essere appropriati fino alle settimane 8-12 secondo la presentazione clinica.",
+          "ISTRUZIONI: progressione verso lo sviluppo di abilit\u00E0 sport-specifiche | avvio di lanci leggeri secondo tolleranza | riscaldamento attivo prima di esercizio e stretching | sviluppo di un programma di mantenimento individualizzato.",
+          "\u26A0\uFE0F RITORNO ALLO SPORT: raccomandato intorno o dopo le 10 SETTIMANE.",
+          "ESERCIZI CON RESTRIZIONI IN QUESTA FASE, da progredire: lat pulldown | chest fly | bench press (piana e inclinata) | shoulder press. \u26A0\uFE0F Nessuna estensione oltre il piano del corpo.",
+          "PLIOMETRIA: lanci a due mani progredendo a una mano | lanci al trampolino | lanci con palla medica.",
+          "STABILIZZAZIONE DINAMICA: progressione verso posizioni di apprensione controllata.",
+          "\u2500\u2500\u2500 CRITERI DI DIMISSIONE E RITORNO ALLO SPORT \u2500\u2500\u2500",
+          "\u2705 Tutti i criteri precedenti ancora soddisfatti",
+          "\u2705 Nessun dolore a riposo n\u00E9 con l'attivit\u00E0",
+          "\u2705 Segno di apprensione ASSENTE",
+          "\u2705 ROM di spalla simmetrico",
+          "\u2705 RAPPORTO 2/3 tra rotazione esterna e interna nell'arto affetto",
+          "\u2705 Nessuna apprensione con carico del peso corporeo",
+          "\u2705 Forza in rotazione esterna e interna al 90% rispetto al lato sano",
+          "\u2705 Superamento del CKCUE Stability Test (closed kinetic chain upper extremity)",
+          "\u2705 Per gli sport di lancio: riferirsi a un Interval Throwing Program per le indicazioni conclusive"
+        ]
+      }
+    ]
+  },
+  {
+    id: 39,
+    category: "Rachide",
+    color: "#8B3A3A",
+    icon: "\u{1F9B5}",
+    title: "Stenosi Lombare con Claudicazione Neurogena \u2014 CPG 2021",
+    source: "Bussi\u00E8res et al. | J Pain 2021;22(9):1015-1039 | Panel multidisciplinare, metodologia GRADE",
+    pdfUrl: "https://www.jpain.org/article/S1526-5900(21)00189-2/fulltext",
+    tags: ["rachide", "stenosi lombare", "claudicazione neurogena", "LSS", "conservativo", "GRADE", "CPG"],
+    summary: "Linea guida GRADE sulla gestione NON chirurgica della stenosi lombare che causa claudicazione neurogena. Sviluppata da un panel multidisciplinare su revisione sistematica di RCT fino a giugno 2019, monitorata fino a ottobre 2020. \u26A0\uFE0F TUTTE le raccomandazioni sono CONDIZIONALI/DEBOLI. Il contributo pi\u00F9 netto \u00E8 l'elenco delle terapie farmacologiche SCONSIGLIATE, che include le infiltrazioni epidurali di steroidi con evidenza di alta qualit\u00E0.",
+    sections: [
+      {
+        title: "Inquadramento e Criteri Clinici",
+        content: [
+          "DEFINIZIONE: la stenosi lombare \u00E8 comunemente un processo degenerativo che causa restringimento del canale spinale centrale, dei recessi laterali o del forame intervertebrale, o una combinazione, comprimendo progressivamente le strutture neurovascolari.",
+          "CLASSIFICAZIONE: acquisita, congenita (evolutiva) o entrambe. Pu\u00F2 associarsi a spondilolistesi degenerativa o scoliosi.",
+          "\u2500\u2500\u2500 QUADRO CLINICO: LA CLAUDICAZIONE NEUROGENA \u2500\u2500\u2500",
+          "Sintomi unilaterali o bilaterali a GLUTEO, COSCIA O POLPACCIO: dolore sordo, crampi, dolore, oppure disturbi sensitivi e dell'equilibrio con parestesie, intorpidimento e debolezza.",
+          "PRECIPITATI da stazione eretta prolungata o cammino. ALLEVIATI da posizione seduta, flessione lombare e decubito supino.",
+          "\u26A0\uFE0F La lombalgia PU\u00D2 essere presente o assente insieme alla claudicazione neurogena.",
+          "\u2500\u2500\u2500 CRITERI DI CLASSIFICAZIONE CLINICA \u2500\u2500\u2500",
+          "Et\u00E0 superiore a 60 anni",
+          "Test di estensione a 30 secondi POSITIVO",
+          "Test di Lasegue (straight leg raise) NEGATIVO",
+          "Dolore a ENTRAMBE le gambe",
+          "Dolore alla gamba alleviato da posizione seduta, inclinazione in avanti o flessione del rachide",
+          "\u2500\u2500\u2500 EPIDEMIOLOGIA \u2500\u2500\u2500",
+          "Prevalenza media stimata su base clinica o radiologica: dall'11% al 38% nella popolazione generale (et\u00E0 media 62 anni, range 19-93); dal 15% al 25% nelle cure primarie; dal 29% al 32% nelle popolazioni di secondo livello.",
+          "\u2500\u2500\u2500 STORIA NATURALE \u2014 DATO PROGNOSTICO CHIAVE \u2500\u2500\u2500",
+          "La storia naturale della stenosi degenerativa da lieve a moderata con claudicazione neurogena tende a essere FAVOREVOLE in circa il 60% dei pazienti (dolore lombare o alla gamba migliorato o invariato).",
+          "\u26A0\uFE0F Circa il 30% dei pazienti \u00E8 atteso PEGGIORARE.",
+          "\u26A0\uFE0F Nonostante questo, la stenosi lombare resta la ragione pi\u00F9 comune di chirurgia spinale nei pazienti oltre i 65 anni.",
+          "La chirurgia pu\u00F2 migliorare rapidamente dolore e disabilit\u00E0 rispetto ai trattamenti non chirurgici nei primi 3 mesi in alcuni pazienti.",
+          "\u2500\u2500\u2500 ESITI VALUTATI DALLA LINEA GUIDA \u2500\u2500\u2500",
+          "Dolore, disabilit\u00E0, qualit\u00E0 di vita e CAPACIT\u00C0 DI CAMMINO.",
+          "\u26A0\uFE0F NOTA SULLA FORZA: le raccomandazioni si basano principalmente su evidenza di livello da basso a moderato o su consenso di un gruppo di lavoro multidisciplinare. Gli autori avvertono che l'effetto reale del trattamento pu\u00F2 differire e le indicazioni vanno interpretate con cautela."
+        ]
+      },
+      {
+        title: "Raccomandazione 1 \u2014 Terapie Non Farmacologiche",
+        content: [
+          "\u2500\u2500\u2500 RIABILITAZIONE MULTIMODALE (evidenza MODERATA, raccomandazione condizionale) \u2500\u2500\u2500",
+          "Nei pazienti con stenosi lombare e claudicazione neurogena, con o senza lombalgia, si SUGGERISCE di offrire una COMBINAZIONE di educazione e consiglio, TERAPIA MANUALE ed ESERCIZIO DOMICILIARE, per il miglioramento della capacit\u00E0 di cammino e dei sintomi o della funzione fisica, nel breve E nel lungo termine.",
+          "COMPONENTI DELL'INTERVENTO MULTIMODALE: modifiche dello stile di vita sedentario e nutrizionale | tecniche di cambiamento comportamentale in associazione a terapia manuale | esercizio e/o riabilitazione | trattamenti non farmacologici ancillari.",
+          "TERAPIA MANUALE: mobilizzazione spinale, manipolazione e massaggio di rachide TORACICO E LOMBARE, BACINO e ARTI INFERIORI.",
+          "ESERCIZIO: programma supervisionato e domiciliare individualizzato \u2014 stretching e training di forza, CICLISMO, e cammino su treadmill con supporto del peso corporeo.",
+          "\u2500\u2500\u2500 DOSAGGIO DOCUMENTATO NEGLI STUDI \u2500\u2500\u2500",
+          "L'intervento riabilitativo multimodale era erogato DUE VOLTE A SETTIMANA PER 6 SETTIMANE. Includeva istruzione individualizzata su esercizio e strategie di autogestione con approccio cognitivo-comportamentale.",
+          "\u26A0\uFE0F AL TERMINE DEL PROGRAMMA: l'esercizio domiciliare quotidiano \u2014 30 MINUTI DI CICLISMO PI\u00D9 30 MINUTI DI ESERCIZI STRUTTURATI \u2014 e le strategie di autogestione DEVONO ESSERE MANTENUTI.",
+          "\u2500\u2500\u2500 RISULTATI DEGLI STUDI \u2500\u2500\u2500",
+          "AMMENDOLIA 2018: differenza media aggiustata nella DISTANZA DI CAMMINO tra gruppo comprensivo e gruppo autodiretto di 304.1 m (IC 95%: 77.9-530.3) a 3 mesi e 421.0 m (181.4-660.6) a 6 mesi.",
+          "\u2192 A 6 mesi l'82% dei partecipanti del gruppo comprensivo raggiungeva il cambiamento minimo clinicamente importante, contro il 63% del gruppo autodiretto. Entrambi gli effetti persistevano a 12 mesi a favore del programma comprensivo.",
+          "MINETAMA 2019: il gruppo con fisioterapia SUPERVISIONATA mostrava miglioramenti significativamente maggiori a 6 settimane rispetto al solo esercizio domiciliare su severit\u00E0 dei sintomi e funzione fisica (ZCQ), distanza di cammino (differenza media 455.9 m; IC 95%: 308.5-603.2), dolore alla gamba, disturbo del cammino e funzionamento fisico.",
+          "SCHNEIDER 2019: terapia manuale con esercizio individualizzato mostrava miglioramenti maggiori ma NON clinicamente importanti a 2 mesi rispetto alle cure mediche o all'esercizio di gruppo. \u26A0\uFE0F A 6 mesi NESSUNA differenza tra gruppi n\u00E9 nei punteggi medi n\u00E9 nei tassi di responder.",
+          "\u2192 Il panel ha giudicato la certezza dell'evidenza MODERATA, con effetti indesiderati minori e transitori e nessun evento avverso maggiore riportato.",
+          "\u2500\u2500\u2500 AGOPUNTURA (evidenza MOLTO BASSA, condizionale) \u2500\u2500\u2500",
+          "Si suggerisce di considerare l'agopuntura tradizionale SU BASE DI PROVA (trial basis) per migliorare dolore e funzione fisica NEL BREVE TERMINE.",
+          "\u2500\u2500\u2500 RIABILITAZIONE POST-OPERATORIA (evidenza BASSA, condizionale) \u2500\u2500\u2500",
+          "Nei casi in cui sia stata eseguita la chirurgia, si suggerisce riabilitazione post-operatoria con TERAPIA COGNITIVO-COMPORTAMENTALE a 12 SETTIMANE dall'intervento.",
+          "DEFINIZIONE: programma SUPERVISIONATO di esercizi e/o materiali educativi che incoraggiano l'attivit\u00E0, a 12 settimane dalla chirurgia."
+        ]
+      },
+      {
+        title: "Raccomandazioni 2 e 3 \u2014 Farmaci",
+        content: [
+          "\u26A0\uFE0F Sezione di orientamento: serve a sapere cosa il paziente sta assumendo e cosa la linea guida sconsiglia, non a guidare la prescrizione.",
+          "\u2500\u2500\u2500 RACCOMANDAZIONE 2 \u2014 L'UNICA CLASSE SUGGERITA \u2500\u2500\u2500",
+          "Nei pazienti con stenosi lombare e claudicazione neurogena, clinici e pazienti POSSONO CONSIDERARE un tentativo con INIBITORI DELLA RICAPTAZIONE DI SEROTONINA E NORADRENALINA (SNRI) o ANTIDEPRESSIVI TRICICLICI (TCA).",
+          "Evidenza: MOLTO BASSA. Raccomandazione condizionale/debole.",
+          "\u2192 Sono classi di antidepressivi comunemente usate nel dolore cronico.",
+          "\u2500\u2500\u2500 RACCOMANDAZIONE 3 \u2014 TERAPIE SCONSIGLIATE \u2500\u2500\u2500",
+          "Si raccomanda CONTRO l'uso delle seguenti terapie farmacologiche:",
+          "\u26A0\uFE0F INFILTRAZIONI EPIDURALI DI STEROIDI \u2014 evidenza di ALTA QUALIT\u00C0. \u00C8 la raccomandazione negativa pi\u00F9 solida dell'intero documento.",
+          "\u2192 Le infiltrazioni epidurali lombari possono essere eseguite con approccio translaminare, caudale o interlaminare, tipicamente con glucocorticoide (triamcinolone 60-120 mg, betametasone 6-12 mg, desametasone 8-10 mg o metilprednisolone 60-120 mg) con o senza anestetico, sotto guida fluoroscopica.",
+          "\u26A0\uFE0F FANS \u2014 per esempio naprossene 250-500 mg o ibuprofene 400-600 mg, da 3-4 volte a 2 volte al giorno, per 4-12 settimane.",
+          "\u26A0\uFE0F METILCOBALAMINA (vitamina B12) \u2014 0.5 mg 3 volte al giorno per 6 mesi.",
+          "\u26A0\uFE0F CALCITONINA \u2014 spray nasale di calcitonina di salmone o calcitonina intramuscolare a dosi variabili.",
+          "\u26A0\uFE0F PARACETAMOLO \u2014 massimo 4 grammi al giorno per 4-12 settimane.",
+          "\u26A0\uFE0F OPPIOIDI \u2014 per esempio morfina 10 mg 3-4 volte al giorno, ossicodone 5-10 mg 2 volte al giorno, tramadolo 50-100 mg 3-4 volte al giorno, in aggiunta ad analgesici non oppioidi, per 4-12 settimane.",
+          "\u26A0\uFE0F MIORILASSANTI \u2014 per esempio tizanidina 2-4 mg 3-4 volte al giorno, clorzoxazone 250 mg 3-4 volte al giorno, per 4-12 settimane.",
+          "\u26A0\uFE0F PREGABALIN \u2014 raccomandazione BASATA SUL CONSENSO. Dosi fisse o flessibili tra 75 e 600 mg al giorno.",
+          "\u26A0\uFE0F GABAPENTIN \u2014 evidenza MOLTO BASSA. Per esempio 300 mg 3 volte al giorno, aumentando a 900 mg 3 volte al giorno.",
+          "\u2192 IMPLICAZIONE PRATICA PER IL FISIOTERAPISTA: la quasi totalit\u00E0 dell'armamentario farmacologico usualmente prescritto in questa condizione \u00E8 sconsigliata da questa linea guida. La gestione conservativa attiva non \u00E8 un'alternativa di ripiego ai farmaci: \u00E8 l'opzione con l'evidenza migliore disponibile."
+        ]
+      },
+      {
+        title: "Sintesi Operativa e Limiti",
+        content: [
+          "\u2500\u2500\u2500 IMPOSTAZIONE COMPLESSIVA \u2500\u2500\u2500",
+          "I clinici DEVONO lavorare in PARTNERSHIP con i pazienti per sviluppare un piano di cura centrato sul paziente che consideri valori e preferenze, discutendo le opzioni efficaci, rischi e benefici, arrivando a una DECISIONE CONDIVISA.",
+          "\u2500\u2500\u2500 IL PACCHETTO SUGGERITO \u2500\u2500\u2500",
+          "Intervento riabilitativo MULTIMODALE composto da:",
+          "1. EDUCAZIONE, modifica dello stile di vita sedentario e nutrizionale \u2014 in particolare nei pazienti con capacit\u00E0 di cammino limitata e in soggetti sovrappeso o obesi con comorbidit\u00E0 correlate",
+          "2. TECNICHE DI CAMBIAMENTO COMPORTAMENTALE associate a terapia manuale (mobilizzazione spinale, manipolazione, massaggio) di rachide toracico e lombare, bacino e arti inferiori",
+          "3. PROGRAMMA DI ESERCIZIO individualizzato, supervisionato E domiciliare: stretching e training di forza, ciclismo, cammino su treadmill con supporto del peso corporeo",
+          "4. Eventuale tentativo di AGOPUNTURA o di ANTIDEPRESSIVI (SNRI, TCA)",
+          "5. Nei casi operati, RIABILITAZIONE POST-OPERATORIA con terapia cognitivo-comportamentale",
+          "\u2500\u2500\u2500 PERCH\u00C9 IL CICLISMO E IL TREADMILL CON SUPPORTO \u2500\u2500\u2500",
+          "\u2192 Entrambe le modalit\u00E0 permettono di allenare in FLESSIONE lombare, la posizione che allevia la claudicazione neurogena, consentendo volumi di lavoro che il cammino in estensione non permetterebbe.",
+          "\u2500\u2500\u2500 LIMITI DICHIARATI \u2500\u2500\u2500",
+          "\u26A0\uFE0F TUTTE le raccomandazioni sono CONDIZIONALI/DEBOLI: nessuna raggiunge la forza 'forte' nel sistema GRADE.",
+          "Sei raccomandazioni si basano principalmente su RCT, cinque su consenso di esperti supportato da revisioni sistematiche, studi osservazionali o evidenza indiretta.",
+          "La ricerca sistematica copre la letteratura fino a giugno 2019, con monitoraggio fino a ottobre 2020: il documento ha ormai diversi anni e va integrato con evidenza pi\u00F9 recente.",
+          "\u26A0\uFE0F Gli autori sottolineano che le raccomandazioni indicano sia quali interventi DOVREBBERO essere offerti, sia quali NON dovrebbero esserlo perch\u00E9 la loro efficacia non \u00E8 stata chiaramente stabilita.",
+          "\u2500\u2500\u2500 LEGENDA GRADE \u2500\u2500\u2500",
+          "FORTE: le conseguenze desiderabili dell'intervento superano chiaramente quelle indesiderabili | CONDIZIONALE/DEBOLE: il bilancio \u00E8 pi\u00F9 incerto e la decisione condivisa \u00E8 essenziale",
+          "Qualit\u00E0 dell'evidenza \u2014 ALTA \u25CF\u25CF\u25CF\u25CF | MODERATA \u25CF\u25CF\u25CF\u25CB | BASSA \u25CF\u25CF\u25CB\u25CB | MOLTO BASSA \u25CF\u25CB\u25CB\u25CB"
+        ]
+      }
+    ]
+  },
+  {
+    id: 40,
+    category: "Geriatria",
+    color: "#2E6B4F",
+    icon: "\u{1F9B4}",
+    title: "Osteoporosi ed Esercizio per la Densit\u00E0 Minerale Ossea \u2014 CPG",
+    source: "Hartley et al. | J Geriatr Phys Ther 2022;45(2) | Academy of Geriatric Physical Therapy \u2014 adattamento della CPG SIGN",
+    pdfUrl: "https://journals.lww.com/jgpt/fulltext/2022/04000/physical_therapist_management_of_patients_with.6.aspx",
+    tags: ["osteoporosi", "densit\u00E0 ossea", "BMD", "esercizio", "postmenopausa", "geriatria", "carico", "CPG"],
+    summary: "Linea guida per la gestione fisioterapica di pazienti con osteoporosi sospetta o confermata, focalizzata sugli interventi di ESERCIZIO che incidono sulla densit\u00E0 minerale ossea (BMD). Adattamento della CPG scozzese SIGN. Le raccomandazioni sono differenziate per SESSO, STATO MENOPAUSALE e SEDE ANATOMICA: ci\u00F2 che funziona sull'anca non funziona sul rachide, e viceversa. \u26A0\uFE0F Non copre la prevenzione delle cadute n\u00E9 la gestione delle fratture, trattate in guide dedicate di questa app.",
+    sections: [
+      {
+        title: "Il Principio Chiave \u2014 Specificit\u00E0 di Sede e Modalit\u00E0",
+        content: [
+          "\u26A0\uFE0F CONCETTO CENTRALE: l'effetto dell'esercizio sulla BMD \u00E8 SPECIFICO PER MODALIT\u00C0 E PER SEDE ANATOMICA. Non esiste un esercizio che migliori la densit\u00E0 ossea ovunque. Le raccomandazioni cambiano a seconda che l'obiettivo sia l'anca, il collo femorale o il rachide lombare.",
+          "\u2192 IMPLICAZIONE PRATICA: la prescrizione va costruita partendo dalla SEDE con la BMD pi\u00F9 compromessa alla densitometria, non da un programma generico.",
+          "\u2500\u2500\u2500 LE CINQUE CATEGORIE DI ESERCIZIO (terminologia SIGN) \u2500\u2500\u2500",
+          "SWB \u2014 CARICO STATICO (static weight-bearing): esercizi in carico senza movimento, tipicamente appoggio monopodalico.",
+          "DWBLF \u2014 CARICO DINAMICO A BASSA FORZA (dynamic weight-bearing low force): eseguiti in piedi, per esempio cammino e tai chi.",
+          "DWBHF \u2014 CARICO DINAMICO AD ALTA FORZA (dynamic weight-bearing high force): eseguiti in stazione eretta con impatto, per esempio corsa, salto, salita scale.",
+          "NWBHF \u2014 SENZA CARICO AD ALTA FORZA (non-weight-bearing high force): rinforzo resistivo progressivo con esercizi a catena cinetica aperta in posizione supportata o seduta.",
+          "COMB \u2014 COMBINAZIONE di pi\u00F9 tipologie tra quelle sopra.",
+          "\u2500\u2500\u2500 ENTIT\u00C0 DELL'EFFETTO \u2014 ASPETTATIVE REALISTICHE \u2500\u2500\u2500",
+          "\u26A0\uFE0F Gli autori sono espliciti: sulla base delle revisioni sistematiche SIGN, nelle donne in postmenopausa esiste un effetto POSITIVO MA PICCOLO sulla BMD, specifico per modalit\u00E0 e sede.",
+          "\u2192 L'esercizio RALLENTA IL DECLINO della densit\u00E0 ossea. La formulazione delle raccomandazioni parla infatti di 'slow the decline', non di aumento.",
+          "\u2500\u2500\u2500 DURATA: IL REQUISITO NON NEGOZIABILE \u2500\u2500\u2500",
+          "\u26A0\uFE0F Tutte le raccomandazioni specificano programmi di LUNGA DURATA, definiti come MINIMO 6-48 MESI.",
+          "\u2192 Non \u00E8 un intervento a ciclo: \u00E8 un cambiamento stabile di abitudine. Programmi pi\u00F9 brevi non hanno mostrato effetto sulla BMD."
+        ]
+      },
+      {
+        title: "Donne in Postmenopausa \u2014 Raccomandazioni",
+        content: [
+          "\u2500\u2500\u2500 ANCA E COLLO FEMORALE (Grado B, evidenza moderata) \u2500\u2500\u2500",
+          "PER L'ANCA: i fisioterapisti DEVONO progettare e consigliare programmi di ESERCIZIO IN CARICO STATICO (SWB) di lunga durata, come l'APPOGGIO MONOPODALICO, per rallentare il declino della BMD dell'anca.",
+          "PER IL COLLO FEMORALE: i fisioterapisti DEVONO progettare e consigliare esercizi di RINFORZO RESISTIVO PROGRESSIVO adeguatamente dosati e di lunga durata, come il weight training, DA SOLI oppure IN COMBINAZIONE con esercizio a impatto (corsa, cammino, aerobica).",
+          "\u2500\u2500\u2500 DOSAGGIO DELL'APPOGGIO MONOPODALICO \u2500\u2500\u2500",
+          "\u26A0\uFE0F Il dosaggio specifico non \u00E8 chiaro, ma nello studio di riferimento: 1 MINUTO PER GAMBA, 3 VOLTE A SETTIMANA, PER 24 SETTIMANE ha prodotto un effetto benefico.",
+          "\u26A0\uFE0F LIMITE DICHIARATO: questo dato deriva da UN SOLO RCT su donne asiatiche senza diagnosi chiara di osteoporosi. La generalizzabilit\u00E0 ad altre popolazioni non \u00E8 chiara.",
+          "\u2192 Gli autori raccomandano comunque le attivit\u00E0 in carico monopodalico, sulla base dei risultati positivi e del BASSO RISCHIO di eventi avversi.",
+          "\u2500\u2500\u2500 RACHIDE LOMBARE (Grado B, evidenza moderata) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO CONSIDERARE di progettare e consigliare programmi di lunga durata consistenti in CAMMINO, TAI CHI, RINFORZO RESISTIVO PROGRESSIVO e DIVERSE COMBINAZIONI di tipologie di esercizio, per rallentare il declino della BMD del rachide lombare.",
+          "Corrispondenza SIGN: DWBLF, NWBHF, COMB.",
+          "\u26A0\uFE0F ASIMMETRIA IMPORTANTE: gli esercizi DWBLF (cammino, tai chi) rallentano la perdita di BMD al RACHIDE LOMBARE ma NON hanno effetto sulla BMD dell'ANCA.",
+          "\u2192 Il corollario pratico \u00E8 che consigliare 'cammini di pi\u00F9' a una paziente con BMD ridotta all'anca non affronta il problema.",
+          "\u2500\u2500\u2500 DOSAGGIO DEGLI STUDI DWBLF \u2500\u2500\u2500",
+          "I programmi erano generalmente ad ALTA INTENSIT\u00C0 e LUNGA DURATA. Range complessivo del dosaggio: 50-60 MINUTI, 3 VOLTE A SETTIMANA, PER 40-54 SETTIMANE, al 60-70% DELLA RISERVA DI FREQUENZA CARDIACA.",
+          "POPOLAZIONE STUDIATA: da donne sane in postmenopausa a donne con osteopenia diagnosticata, et\u00E0 da 46 a 92 anni. Molti studi includevano anche esercizi di equilibrio e flessibilit\u00E0 in aggiunta.",
+          "\u2500\u2500\u2500 AVVERTENZE SULLA SICUREZZA E L'ADERENZA \u2500\u2500\u2500",
+          "\u26A0\uFE0F Negli studi DWBLF sono stati riportati INFORTUNI e ALTA ATTRITION (abbandono), elementi di preoccupazione per gli autori. Gli infortuni si sono per\u00F2 verificati SIA nei gruppi sperimentali SIA nei controlli.",
+          "\u26A0\uFE0F Gli alti tassi di abbandono suggeriscono che le STRATEGIE MOTIVAZIONALI debbano essere un aspetto importante di questo tipo di programma.",
+          "\u2192 \u00C8 un'indicazione operativa concreta: con durate di 6-48 mesi, il fattore limitante non \u00E8 la prescrizione ma l'aderenza."
+        ]
+      },
+      {
+        title: "Donne in Premenopausa e Uomini",
+        content: [
+          "\u2500\u2500\u2500 PREMENOPAUSA \u2014 COLLO FEMORALE (Grado B, evidenza moderata) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO CONSIDERARE di progettare e consigliare programmi di lunga durata consistenti in ESERCIZIO AD ALTO IMPATTO (come la corsa) e nella COMBINAZIONE di esercizio a impatto (come la salita di scale) con RINFORZO RESISTIVO PROGRESSIVO, per rallentare il declino della BMD del collo femorale.",
+          "\u2500\u2500\u2500 PREMENOPAUSA \u2014 RACHIDE LOMBARE (Grado B, evidenza moderata) \u2500\u2500\u2500",
+          "I fisioterapisti DEVONO CONSIDERARE di progettare e consigliare programmi di lunga durata consistenti in RINFORZO RESISTIVO PROGRESSIVO DA SOLO oppure IN COMBINAZIONE con esercizi a impatto (salita scale, corsa), per rallentare il declino della BMD del rachide lombare.",
+          "\u2500\u2500\u2500 DIFFERENZA CHIAVE TRA LE DUE POPOLAZIONI \u2500\u2500\u2500",
+          "\u2192 In PREMENOPAUSA l'accento \u00E8 sull'ALTO IMPATTO: corsa e salita scale compaiono in entrambe le raccomandazioni.",
+          "\u2192 In POSTMENOPAUSA l'alto impatto scompare dalle raccomandazioni principali, sostituito da carico statico per l'anca e da modalit\u00E0 a basso impatto per il rachide.",
+          "\u26A0\uFE0F LACUNE DICHIARATE IN PREMENOPAUSA: nessuna revisione sistematica ha fornito evidenza su esercizio in CARICO STATICO (SWB) n\u00E9 su CARICO DINAMICO A BASSA FORZA (DWBLF) in questa popolazione. Una meta-analisi su 10 RCT sull'effetto del cammino ha trovato un solo piccolo trial su donne perimenopausali di 40-60 anni (n=50), che NON ha mostrato alcun effetto del cammino sulla BMD in quella coorte.",
+          "\u2500\u2500\u2500 UOMINI \u2014 NESSUNA RACCOMANDAZIONE POSSIBILE \u2500\u2500\u2500",
+          "\u26A0\uFE0F L'evidenza \u00E8 INSUFFICIENTE per formulare una raccomandazione sull'esercizio per migliorare la BMD negli uomini.",
+          "MOTIVAZIONE: una meta-analisi ha identificato solo 3 studi sugli effetti dell'esercizio sulla BMD negli uomini. Popolazioni diverse, tipologie di esercizio variabili, misure di BMD differenti. La qualit\u00E0 degli studi era complessivamente poco chiara e 2 dei 3 studi erano TESI DI DOTTORATO NON PUBBLICATE.",
+          "\u2192 Questo NON significa che l'esercizio sia inutile negli uomini: significa che non ci sono studi sufficienti per pronunciarsi. \u00C8 il caso classico in cui assenza di raccomandazione non equivale a raccomandazione negativa (vedi la scheda 'Come Leggere i Gradi').",
+          "\u2500\u2500\u2500 COLLOCAZIONE NEL PERCORSO CLINICO \u2500\u2500\u2500",
+          "Questa linea guida riguarda SPECIFICAMENTE gli interventi di esercizio che incidono sulla densit\u00E0 minerale ossea. Non copre la prevenzione delle cadute n\u00E9 la gestione post-frattura.",
+          "\u2192 Per la prevenzione delle cadute nell'anziano e per la gestione della frattura di femore, questa app contiene guide dedicate nella stessa categoria Geriatria. I tre documenti si integrano: la BMD \u00E8 solo uno dei determinanti del rischio di frattura, insieme al rischio di caduta e alla meccanica dell'impatto.",
+          "\u2500\u2500\u2500 NOTA SUL SISTEMA DI GRADING \u2500\u2500\u2500",
+          "Tutte le raccomandazioni di questo documento sono di GRADO B, basate su evidenza moderata. Nessuna raggiunge il grado A.",
+          "\u26A0\uFE0F Gli autori precisano che le raccomandazioni NON costituiscono uno standard di cura medica e che discostamenti significativi vanno documentati in cartella."
+        ]
+      }
+    ]
+  },
+  {
+    id: 41,
+    category: "Prescrizione Esercizio",
+    color: "#2E6B8A",
+    icon: "\u{1F9E0}",
+    title: "Prescrizione dell'Esercizio Terapeutico nell'Emicrania \u2014 CPG 2023",
+    source: "La Touche et al. | J Headache Pain 2023;24:68 | Metodologia AGREE, gradi SIGN, valutazione GRADE",
+    pdfUrl: "https://thejournalofheadacheandpain.biomedcentral.com/articles/10.1186/s10194-023-01571-8",
+    tags: ["emicrania", "esercizio", "aerobico", "yoga", "HIIT", "tai chi", "stile di vita", "prescrizione", "CPG"],
+    summary: "Linea guida per la prescrizione dell'esercizio terapeutico nei pazienti con emicrania, rivolta a neurologi, FISIOTERAPISTI e fisiologi dell'esercizio. Ogni modalit\u00E0 di esercizio riceve un grado di raccomandazione e un DOSAGGIO SPECIFICO in settimane e sessioni settimanali. \u26A0\uFE0F La quasi totalit\u00E0 dell'evidenza riguarda l'emicrania EPISODICA; sull'emicrania cronica i dati sono molto pi\u00F9 scarsi.",
+    sections: [
+      {
+        title: "Inquadramento e Gerarchia delle Raccomandazioni",
+        content: [
+          "\u2500\u2500\u2500 PERCH\u00C9 RIGUARDA IL FISIOTERAPISTA \u2500\u2500\u2500",
+          "L'emicrania \u00E8 la SECONDA CAUSA DI DISABILIT\u00C0 AL MONDO dopo la lombalgia. Prevalenza globale del 14.4%, con picco di prevalenza e di anni vissuti con disabilit\u00E0 tra i 35 e i 39 anni.",
+          "Gli utilizzatori previsti del documento includono esplicitamente neurologi, fisioterapisti e fisiologi dell'esercizio.",
+          "\u2500\u2500\u2500 GRADO B \u2014 LE QUATTRO MODALIT\u00C0 MEGLIO SUPPORTATE \u2500\u2500\u2500",
+          "1. ESERCIZIO AEROBICO (in generale)",
+          "2. ESERCIZIO AEROBICO CONTINUO A INTENSIT\u00C0 MODERATA",
+          "3. YOGA",
+          "4. ESERCIZIO ASSOCIATO A RACCOMANDAZIONI SULLO STILE DI VITA",
+          "\u2192 Per queste quattro il grado B copre il miglioramento di SINTOMI, DISABILIT\u00C0 e QUALIT\u00C0 DI VITA.",
+          "\u2500\u2500\u2500 GRADO C \u2014 MODALIT\u00C0 CON SUPPORTO PI\u00D9 DEBOLE \u2500\u2500\u2500",
+          "Tecniche di rilassamento | HIIT (allenamento intervallato ad alta intensit\u00E0) | esercizio aerobico continuo a BASSA intensit\u00E0 | combinazione di esercizio e tecniche di rilassamento | Tai Chi | esercizio di resistenza.",
+          "\u2192 Per queste il grado C copre il miglioramento di sintomi e disabilit\u00E0, non la qualit\u00E0 di vita.",
+          "\u2500\u2500\u2500 GRADO D \u2500\u2500\u2500",
+          "QI-GONG: migliora in modo remoto frequenza del dolore e disabilit\u00E0 nell'emicrania episodica dopo 3 mesi di intervento.",
+          "\u2500\u2500\u2500 IL LINGUAGGIO DELLA CERTEZZA \u2014 DA LEGGERE CON ATTENZIONE \u2500\u2500\u2500",
+          "Il documento usa tre livelli di formulazione che indicano quanto \u00E8 solido l'effetto atteso, e vanno distinti:",
+          "\u00C8 PROBABILE CHE MIGLIORI (likely to improve) \u2014 il livello di certezza pi\u00F9 alto",
+          "POTREBBE MIGLIORARE (might improve) \u2014 certezza intermedia",
+          "MIGLIORA IN MODO REMOTO (remotely improves) \u2014 certezza pi\u00F9 bassa, effetto possibile ma poco sostenuto",
+          "\u26A0\uFE0F Nelle voci che seguono queste formulazioni sono mantenute fedelmente: la differenza tra 'probabile' e 'remoto' non \u00E8 stilistica."
+        ]
+      },
+      {
+        title: "Grado B \u2014 Le Quattro Modalit\u00E0 Principali con Dosaggio",
+        content: [
+          "\u2500\u2500\u2500 ESERCIZIO AEROBICO CONTINUO A INTENSIT\u00C0 MODERATA \u2500\u2500\u2500",
+          "DEFINIZIONE: intervento che impiega grandi gruppi muscolari, con aumento del respiro e mantenimento continuo della frequenza cardiaca a un'intensit\u00E0 corrispondente al 40-59% della RISERVA DI FREQUENZA CARDIACA o al 40-59% della riserva di consumo di ossigeno.",
+          "\u2705 DOSAGGIO: DA 8 SETTIMANE IN SU, 3 VOLTE A SETTIMANA.",
+          "EFFETTI ATTESI nell'emicrania episodica: \u00E8 PROBABILE che migliori la FREQUENZA delle cefalee | POTREBBE migliorare l'INTENSIT\u00C0 del dolore | migliora in modo REMOTO durata dell'attacco, disabilit\u00E0 e qualit\u00E0 di vita.",
+          "BASE DI EVIDENZA: 6 RCT, 5 trial quasi-randomizzati e 1 studio di coorte, per un totale di 564 partecipanti (436 con emicrania episodica, 103 non chiaramente differenziati, 25 controlli sani).",
+          "\u2500\u2500\u2500 YOGA \u2500\u2500\u2500",
+          "DEFINIZIONE: intervento mente-corpo con 3 componenti \u2014 posizioni di allineamento fisico (asana), tecniche di respirazione e esercizi di mindfulness (meditazione). Intensit\u00E0 variabile da leggera a vigorosa; include forza, equilibrio e coordinazione.",
+          "\u2705 DOSAGGIO: DA 6 SETTIMANE IN SU, 3 VOLTE A SETTIMANA.",
+          "EFFETTI ATTESI nell'emicrania episodica: \u00E8 PROBABILE che migliori FREQUENZA delle cefalee e DISABILIT\u00C0 | migliora in modo REMOTO intensit\u00E0 del dolore e durata dell'attacco.",
+          "BASE DI EVIDENZA: 2 revisioni sistematiche con meta-analisi e 6 RCT, per un totale di 467 pazienti con emicrania episodica.",
+          "\u2192 Lo yoga \u00E8 l'unica modalit\u00E0 di grado B che agisce con alta certezza SIA sulla frequenza SIA sulla disabilit\u00E0.",
+          "\u2500\u2500\u2500 ESERCIZIO E RACCOMANDAZIONI SULLO STILE DI VITA \u2500\u2500\u2500",
+          "DEFINIZIONE: insieme di interventi diretti a implementare abitudini riguardanti attivit\u00E0 fisica, ORARI DEI PASTI, SONNO, CONSUMO DI FARMACI e GESTIONE DELLO STRESS.",
+          "RACCOMANDAZIONI SPECIFICHE INCLUSE: esercizio regolare | ORARI DI SONNO REGOLARI lungo tutta la settimana | ORARI DEI PASTI COSTANTI | IDRATAZIONE ADEGUATA | rilassamento per la gestione dello stress | EVITARE L'ASSUNZIONE ECCESSIVA DI FARMACI.",
+          "\u2705 DOSAGGIO: DOPO 6 SETTIMANE di intervento, con 3-5 SESSIONI A SETTIMANA.",
+          "EFFETTI ATTESI: \u00E8 PROBABILE che riduca la FREQUENZA del dolore | POTREBBE migliorare intensit\u00E0 del dolore e durata dell'attacco | riduce in modo REMOTO la disabilit\u00E0.",
+          "\u26A0\uFE0F VALIDO SIA PER EMICRANIA EPISODICA SIA CRONICA. Inoltre migliora in modo remoto funzione e qualit\u00E0 di vita nei pazienti con emicrania CRONICA.",
+          "BASE DI EVIDENZA: 2 RCT e 3 coorti, per un totale di 954 individui \u2014 490 con emicrania episodica e 464 con emicrania cronica.",
+          "\u2192 \u00C8 L'UNICA RACCOMANDAZIONE DI GRADO B CON EVIDENZA SOSTANZIALE SULL'EMICRANIA CRONICA, ed \u00E8 anche quella con la popolazione studiata pi\u00F9 ampia.",
+          "\u2500\u2500\u2500 ESERCIZIO AEROBICO (categoria generale) \u2500\u2500\u2500",
+          "\u00C8 PROBABILE che riduca frequenza, intensit\u00E0 e durata del dolore, e che migliori la qualit\u00E0 di vita.",
+          "Negli studi inclusi il gruppo sperimentale svolgeva endurance fisica, fitness, esercizio aerobico e terapia con esercizio per ALMENO 6 SETTIMANE."
+        ]
+      },
+      {
+        title: "Grado C \u2014 Modalit\u00E0 con Supporto Pi\u00F9 Debole",
+        content: [
+          "\u2500\u2500\u2500 HIIT \u2014 ALLENAMENTO INTERVALLATO AD ALTA INTENSIT\u00C0 \u2500\u2500\u2500",
+          "DEFINIZIONE: esercizio che alterna periodi di esercizio aerobico ad alta intensit\u00E0, pari o inferiore al massimo consumo di ossigeno, con recupero leggero o nessun esercizio tra gli intervalli.",
+          "\u2705 DOSAGGIO: 8 SETTIMANE, 3 SESSIONI A SETTIMANA.",
+          "EFFETTI ATTESI nell'emicrania episodica: POTREBBE migliorare la FREQUENZA del dolore | migliora in modo REMOTO intensit\u00E0, durata dell'attacco e disabilit\u00E0.",
+          "BASE: 3 RCT, 133 pazienti con emicrania episodica.",
+          "\u2192 Nonostante l'appeal dell'alta intensit\u00E0, l'HIIT ha grado C mentre l'aerobico moderato ha grado B: la maggiore intensit\u00E0 non si traduce in maggiore efficacia sull'emicrania.",
+          "\u2500\u2500\u2500 ESERCIZIO AEROBICO CONTINUO A BASSA INTENSIT\u00C0 \u2500\u2500\u2500",
+          "DEFINIZIONE: attivit\u00E0 con grandi gruppi muscolari, mantenibile in modo continuo e ritmico, a intensit\u00E0 da 8 a 11 sulla scala di Borg, 50-63% della frequenza cardiaca massima, oppure 20-39% della riserva di frequenza cardiaca o di consumo di ossigeno.",
+          "\u2705 DOSAGGIO: 6 SETTIMANE, 3 SESSIONI A SETTIMANA.",
+          "EFFETTI ATTESI nell'emicrania episodica: migliora in modo REMOTO frequenza delle cefalee, intensit\u00E0 del dolore e durata totale mensile dell'emicrania.",
+          "BASE: 1 RCT e 1 trial quasi-randomizzato, 40 pazienti episodici e 60 cronici.",
+          "\u2500\u2500\u2500 TECNICHE DI RILASSAMENTO \u2500\u2500\u2500",
+          "DEFINIZIONE: tecniche di alternanza tra gruppi muscolari tesi e rilassati, training autogeno o rilassamento guidato, visualizzazione e guided imagery, RESPIRAZIONE DIAFRAMMATICA, e mini-rilassamento focalizzato su un numero limitato di muscoli di TESTA, COLLO E SPALLE.",
+          "\u2705 DOSAGGIO PER LA FREQUENZA: ALMENO 6 SETTIMANE, da 1 sessione a settimana fino a sessioni QUOTIDIANE.",
+          "\u2705 DOSAGGIO PER L'INTENSIT\u00C0 DEL DOLORE: 12 SETTIMANE, 3 SESSIONI A SETTIMANA.",
+          "EFFETTI: migliorano in modo REMOTO la frequenza delle cefalee e, con il dosaggio pi\u00F9 lungo, l'intensit\u00E0 del dolore, nell'emicrania episodica.",
+          "BASE: 3 RCT, 311 individui (126 episodici, 139 senza diagnosi differenziale chiara, 46 controlli sani).",
+          "\u2500\u2500\u2500 ESERCIZIO E TECNICHE DI RILASSAMENTO COMBINATI \u2500\u2500\u2500",
+          "Combinazione delle due modalit\u00E0 gi\u00E0 definite.",
+          "\u2705 DOSAGGIO: 6 SETTIMANE di intervento.",
+          "BASE: 2 RCT e 1 trial quasi-randomizzato, 119 pazienti (91 episodici, 28 senza diagnosi differenziale chiara).",
+          "\u2500\u2500\u2500 TAI CHI \u2500\u2500\u2500",
+          "\u2705 DOSAGGIO: 12 SETTIMANE di intervento.",
+          "\u26A0\uFE0F Il documento riporta che il Tai Chi migliora in modo REMOTO alcuni parametri ma POTREBBE NON MIGLIORARNE altri: negli studi si osservava riduzione dei giorni con emicrania al mese, intensit\u00E0 e durata nel gruppo Tai Chi a fine trattamento e al follow-up.",
+          "\u2500\u2500\u2500 ESERCIZIO DI RESISTENZA \u2500\u2500\u2500",
+          "Migliora in modo REMOTO frequenza del dolore, intensit\u00E0 e qualit\u00E0 di vita dei pazienti.",
+          "\u2500\u2500\u2500 SINTESI OPERATIVA \u2500\u2500\u2500",
+          "\u2192 Se si dovesse scegliere una sola prescrizione sulla base di questa linea guida: AEROBICO MODERATO 3 VOLTE A SETTIMANA PER ALMENO 8 SETTIMANE, oppure YOGA 3 VOLTE A SETTIMANA PER ALMENO 6 SETTIMANE, in entrambi i casi inseriti in un quadro di raccomandazioni sullo stile di vita che comprenda regolarit\u00E0 di sonno e pasti, idratazione e gestione dello stress.",
+          "\u26A0\uFE0F LIMITE PRINCIPALE DEL DOCUMENTO: la stragrande maggioranza dei partecipanti aveva EMICRANIA EPISODICA. L'unica raccomandazione con evidenza sostanziale sull'emicrania CRONICA \u00E8 quella su esercizio e stile di vita.",
+          "\u26A0\uFE0F NOTA SUL SISTEMA DI GRADING: questo documento usa i gradi SIGN (A-D), diversi sia dal sistema APTA a lettere sia da AAOS e ACR. Vedi la scheda 'Come Leggere i Gradi di Raccomandazione'."
+        ]
+      }
+    ]
+  },
+  {
+    id: 42,
+    category: "Reumatologia",
+    color: "#6B2D5C",
+    icon: "\u{1F9B4}",
+    title: "Artrosi di Ginocchio, Anca e Mano \u2014 Raccomandazioni ACR 2026",
+    source: "American College of Rheumatology | Aggiornamento 2026 delle raccomandazioni ACR/Arthritis Foundation 2019 | Approvato dal Board ACR l'8 settembre 2026",
+    pdfUrl: "https://assets.contentstack.io/v3/assets/bltee37abb6b278ab2c/bltb3d12c34020da842/oa-guideline-summary-2026.pdf",
+    tags: ["artrosi", "ginocchio", "anca", "mano", "OA", "ACR", "esercizio", "PRP", "cellule staminali", "acido ialuronico"],
+    summary: "Aggiornamento 2026 delle raccomandazioni ACR per la gestione dell'artrosi di ginocchio, anca e mano. Sostituisce la versione ACR/Arthritis Foundation 2019. \u26A0\uFE0F Documento di sintesi approvato dal Board ACR l'8 settembre 2026; il manoscritto completo sar\u00E0 pubblicato su Arthritis & Rheumatology e Arthritis Care & Research. Contiene raccomandazioni FORTI CONTRO PRP, cellule staminali, glucosamina e condroitina.",
+    sections: [
+      {
+        title: "Impianto e Approcci Comportamentali e Fisici",
+        content: [
+          "\u2500\u2500\u2500 TRE ASSUNZIONI ALLA BASE DI TUTTE LE RACCOMANDAZIONI \u2500\u2500\u2500",
+          "1. La gestione deve INIZIARE dagli interventi con la MINORE TOSSICIT\u00C0 POTENZIALE.",
+          "2. I trattamenti specialistici per l'artrosi devono essere erogati da persone con la competenza e l'esperienza necessarie per quello specifico trattamento.",
+          "3. Le decisioni terapeutiche devono essere PERSONALIZZATE e prese in un processo di DECISIONE CONDIVISA, tenendo conto di preferenze e valori del paziente, severit\u00E0 dei sintomi, altre condizioni di salute, controindicazioni, fattori di rischio per eventi avversi e accesso al trattamento.",
+          "\u2192 La gestione richiede spesso un approccio MULTIMODALE con approcci comportamentali, fisici e farmacologici, in collaborazione con un team che include medici di base, reumatologi, FISIOTERAPISTI, terapisti occupazionali e ortopedici.",
+          "\u2500\u2500\u2500 GOOD PRACTICE STATEMENT (non graduate, ma vincolanti) \u2500\u2500\u2500",
+          "\u2705 EDUCAZIONE E AUTOGESTIONE: in tutte le persone con artrosi DEVE essere fornita educazione sulla malattia e sulla sua gestione, e va incoraggiata la partecipazione a programmi di autogestione per aumentare l'autoefficacia.",
+          "\u2705 INVIO IN FISIOTERAPIA: nelle persone con artrosi e limitazioni funzionali, esacerbazione del dolore o aumento dell'affaticamento che limitano l'esercizio o le attivit\u00E0 quotidiane, i clinici DEVONO inviare in fisioterapia.",
+          "\u2705 INVIO IN TERAPIA OCCUPAZIONALE: nelle persone con limitazioni nelle attivit\u00E0 quotidiane in particolare degli ARTI SUPERIORI, e con difficolt\u00E0 legate all'artrosi nel ricoprire ruoli sociali e lavorativi.",
+          "\u2705 AUSILI: nelle persone con artrosi di ginocchio e anca e limitazioni nel cammino, i clinici DEVONO consigliare l'uso di bastoni e altri ausili per la mobilit\u00E0, come appropriato.",
+          "\u2500\u2500\u2500 RACCOMANDAZIONI FORTI A FAVORE \u2500\u2500\u2500",
+          "\u2705 ESERCIZIO \u2014 ginocchio e anca. Certezza dell'evidenza: MODERATA. \u00C8 la raccomandazione non farmacologica pi\u00F9 forte del documento.",
+          "\u2705 CALO PONDERALE \u2014 ginocchio e anca, nelle persone che soddisfano i criteri di sovrappeso o obesit\u00E0. Certezza: MODERATA.",
+          "\u2500\u2500\u2500 RACCOMANDAZIONI CONDIZIONALI A FAVORE \u2500\u2500\u2500",
+          "Esercizio per la MANO nell'artrosi della mano \u2014 certezza bassa",
+          "Tutori tibio-femorali e femoro-rotulei nel ginocchio \u2014 certezza da molto bassa a moderata secondo il tipo di tutore",
+          "Ortesi per la mano nell'artrosi della prima carpo-metacarpale e delle dita \u2014 certezza bassa",
+          "Taping terapeutico nel ginocchio e nella prima carpo-metacarpale \u2014 certezza bassa",
+          "Guanti per artrite nella mano \u2014 certezza molto bassa",
+          "Terapia cognitivo-comportamentale in ginocchio, anca e mano \u2014 certezza bassa",
+          "Tai chi in ginocchio e anca \u2014 certezza molto bassa",
+          "Yoga nel ginocchio \u2014 certezza molto bassa",
+          "Interventi termici locali, caldo o freddo, in ginocchio, anca e mano \u2014 certezza bassa",
+          "Bagno di paraffina nella mano \u2014 certezza bassa",
+          "\u26A0\uFE0F Massoterapia in ginocchio e anca \u2014 certezza bassa. CAMBIO DI DIREZIONE rispetto al 2019.",
+          "Agopuntura in ginocchio, anca e mano \u2014 certezza MODERATA per ginocchio e anca, molto bassa per la mano",
+          "Ablazione con radiofrequenza nel ginocchio \u2014 certezza bassa",
+          "\u2500\u2500\u2500 RACCOMANDAZIONI CONDIZIONALI CONTRO \u2500\u2500\u2500",
+          "\u26A0\uFE0F PLANTARI CON CUNEO LATERALE E MEDIALE \u2014 ginocchio e anca. Certezza molto bassa.",
+          "\u2192 Coerente con la CPG AAOS 2021 gi\u00E0 presente in questa app, che li sconsiglia con raccomandazione FORTE.",
+          "\u26A0\uFE0F TENS \u2014 ginocchio e anca. Certezza bassa."
+        ]
+      },
+      {
+        title: "Approcci Farmacologici",
+        content: [
+          "\u26A0\uFE0F Sezione di orientamento: serve a sapere cosa il paziente assume e cosa la linea guida sconsiglia, non a guidare la prescrizione.",
+          "\u2500\u2500\u2500 FORTI A FAVORE \u2500\u2500\u2500",
+          "\u2705 FANS TOPICI \u2014 ginocchio e mano. Certezza moderata.",
+          "\u2705 FANS ORALI \u2014 ginocchio, anca e mano. Certezza moderata.",
+          "\u2705 INFILTRAZIONI INTRARTICOLARI DI GLUCOCORTICOIDI \u2014 ginocchio e anca. Certezza bassa.",
+          "\u2705 GUIDA ECOGRAFICA per le infiltrazioni intrarticolari di glucocorticoidi nell'ANCA. Certezza bassa.",
+          "\u2500\u2500\u2500 CONDIZIONALI A FAVORE \u2500\u2500\u2500",
+          "\u26A0\uFE0F GLP-1 RA \u2014 NUOVA RACCOMANDAZIONE 2026: nelle persone con artrosi di ginocchio e obesit\u00E0, per raggiungere il peso ottimale IN COMBINAZIONE con dieta ed esercizio. Certezza moderata.",
+          "\u2192 \u00C8 l'unica raccomandazione completamente nuova rispetto al 2019, e riflette l'ingresso degli agonisti GLP-1 nella gestione dell'artrosi attraverso il controllo del peso.",
+          "Infiltrazioni intrarticolari di glucocorticoidi nella MANO \u2014 certezza bassa",
+          "FANS topici PREFERITI agli orali in ginocchio e mano \u2014 certezza bassa",
+          "Capsaicina topica nel ginocchio \u2014 certezza moderata",
+          "Paracetamolo in ginocchio, anca e mano \u2014 certezza bassa",
+          "Duloxetina (SNRI) in ginocchio, anca e mano \u2014 certezza moderata",
+          "\u26A0\uFE0F Metotrexato nell'artrosi EROSIVA della mano \u2014 certezza bassa. CAMBIO DI DIREZIONE rispetto al 2019.",
+          "\u2500\u2500\u2500 FORTI CONTRO \u2014 IL CONTRIBUTO PI\u00D9 NETTO \u2500\u2500\u2500",
+          "\u26A0\uFE0F PRP (plasma ricco di piastrine) \u2014 ginocchio e anca. Certezza bassa.",
+          "\u2192 NOTA DI CONFRONTO: la CPG AAOS 2021 presente in questa app raccomanda il PRP con evidenza LIMITATA a favore. Le due linee guida divergono, e l'ACR 2026 \u00E8 pi\u00F9 recente e pi\u00F9 netta.",
+          "\u26A0\uFE0F INFILTRAZIONI DI CELLULE STAMINALI \u2014 ginocchio e anca. Certezza MODERATA.",
+          "\u26A0\uFE0F IDROSSICLOROCHINA \u2014 ginocchio, anca e mano. Certezza moderata.",
+          "\u26A0\uFE0F BIFOSFONATI \u2014 ginocchio, anca e mano. Certezza moderata.",
+          "\u26A0\uFE0F GLUCOSAMINA, CONDROITINA e loro combinazioni \u2014 ginocchio, anca e mano. Certezza bassa per la sola glucosamina, MODERATA per la combinazione. CAMBIO DI DIREZIONE rispetto al 2019.",
+          "\u2192 NOTA DI CONFRONTO: la CPG AAOS 2021 in questa app le colloca tra gli integratori con evidenza limitata e incoerente. L'ACR 2026 passa a una raccomandazione FORTE CONTRO.",
+          "\u26A0\uFE0F INIBITORI DEL TNF-alfa \u2014 ginocchio, anca e mano. Certezza molto bassa per ginocchio e anca, moderata per la mano.",
+          "\u26A0\uFE0F INIBIZIONE DELL'IL-1 nella MANO \u2014 certezza bassa.",
+          "\u2500\u2500\u2500 CONDIZIONALI CONTRO \u2500\u2500\u2500",
+          "Inibizione dell'IL-1 in ginocchio e anca \u2014 certezza bassa",
+          "\u26A0\uFE0F Capsaicina topica nella MANO \u2014 certezza moderata. Da notare il contrasto: raccomandata condizionalmente PER il ginocchio, sconsigliata condizionalmente per la mano.",
+          "Altri SNRI, antidepressivi triciclici, pregabalin e gabapentin \u2014 ginocchio, anca e mano. Certezza molto bassa.",
+          "\u26A0\uFE0F OPPIOIDI \u2014 ginocchio, anca e mano. Certezza bassa.",
+          "\u26A0\uFE0F ACIDO IALURONICO intrarticolare \u2014 ginocchio, anca e mano. Certezza moderata per ginocchio e anca, molto bassa per la mano.",
+          "\u2192 Coerente con la CPG AAOS 2021, che lo sconsiglia per l'uso di routine con raccomandazione moderata.",
+          "Tossina botulinica intrarticolare \u2014 ginocchio e anca. Certezza moderata.",
+          "Proloterapia con destrosio \u2014 ginocchio e anca. Certezza bassa.",
+          "Metotrexato \u2014 ginocchio e anca. Certezza bassa. (Da distinguere dalla raccomandazione condizionale A FAVORE nell'artrosi erosiva della mano.)",
+          "Colchicina \u2014 ginocchio, anca e mano. Certezza molto bassa.",
+          "Vitamina D \u2014 ginocchio, anca e mano. Certezza bassa.",
+          "Olio di pesce \u2014 ginocchio, anca e mano. Certezza moderata."
+        ]
+      },
+      {
+        title: "Sintesi Operativa e Note di Lettura",
+        content: [
+          "\u2500\u2500\u2500 IL MESSAGGIO CENTRALE \u2500\u2500\u2500",
+          "Le uniche due raccomandazioni FORTI a favore tra gli approcci non farmacologici sono ESERCIZIO e CALO PONDERALE, entrambe per ginocchio e anca, entrambe con certezza moderata. Tutto il resto degli interventi fisici \u00E8 condizionale.",
+          "\u2192 Combinato con il principio di iniziare dagli interventi a minore tossicit\u00E0, questo colloca la fisioterapia attiva come primo livello indiscusso.",
+          "\u2500\u2500\u2500 I QUATTRO CAMBI DI DIREZIONE RISPETTO AL 2019 \u2500\u2500\u2500",
+          "Il documento segnala esplicitamente quattro raccomandazioni che hanno cambiato direzione:",
+          "1. MASSOTERAPIA in ginocchio e anca \u2014 ora condizionalmente A FAVORE",
+          "2. METOTREXATO nell'artrosi erosiva della mano \u2014 ora condizionalmente A FAVORE",
+          "3. GLUCOSAMINA E CONDROITINA \u2014 ora FORTEMENTE CONTRO",
+          "4. Pi\u00F9 la nuova raccomandazione sui GLP-1 RA, che nel 2019 non esisteva",
+          "\u2500\u2500\u2500 DIVERGENZE CON LA CPG AAOS 2021 PRESENTE IN QUESTA APP \u2500\u2500\u2500",
+          "\u26A0\uFE0F PRP: AAOS 2021 lo raccomanda con evidenza limitata; ACR 2026 lo sconsiglia FORTEMENTE. Divergenza sostanziale.",
+          "\u26A0\uFE0F GLUCOSAMINA E CONDROITINA: AAOS 2021 le colloca tra gli integratori con possibile utilit\u00E0 ma evidenza incoerente; ACR 2026 le sconsiglia FORTEMENTE.",
+          "\u2705 CONCORDANZE: entrambe raccomandano fortemente esercizio, autogestione, FANS topici e orali; entrambe sconsigliano plantari con cuneo laterale e acido ialuronico di routine.",
+          "\u2192 Quando due linee guida di alta qualit\u00E0 divergono, il documento pi\u00F9 recente e la certezza dell'evidenza dichiarata sono i criteri pi\u00F9 utili. Per PRP e glucosamina, l'ACR 2026 \u00E8 sia pi\u00F9 recente sia pi\u00F9 netta.",
+          "\u2500\u2500\u2500 SISTEMA DI GRADING \u2500\u2500\u2500",
+          "GOOD PRACTICE STATEMENT (ungraded): affermazione di buona pratica, non sottoposta a graduazione perch\u00E9 il beneficio \u00E8 considerato ovvio e indiscutibile.",
+          "FORTE: i benefici superano chiaramente i rischi; la maggioranza dei pazienti informati sceglierebbe quell'opzione.",
+          "CONDIZIONALE: il bilancio tra benefici e rischi \u00E8 pi\u00F9 incerto; scelte diverse sono appropriate per pazienti diversi e la decisione condivisa \u00E8 essenziale.",
+          "CERTEZZA DELL'EVIDENZA: alta, moderata, bassa, molto bassa \u2014 indipendente dalla forza della raccomandazione. Una raccomandazione FORTE pu\u00F2 poggiare su evidenza BASSA (\u00E8 il caso del PRP e delle infiltrazioni di glucocorticoidi).",
+          "\u2500\u2500\u2500 AVVERTENZA SULLO STATO DEL DOCUMENTO \u2500\u2500\u2500",
+          "\u26A0\uFE0F Questa \u00E8 la SINTESI approvata dal Board ACR l'8 settembre 2026. Il manoscritto completo, con metodologia, analisi dell'evidenza e razionale di ciascuna raccomandazione, sar\u00E0 sottomesso per pubblicazione su Arthritis & Rheumatology e Arthritis Care & Research.",
+          "\u2192 Per il razionale dettagliato di ogni singola raccomandazione occorrer\u00E0 attendere il manoscritto completo.",
+          "\u26A0\uFE0F Le raccomandazioni sono formulate nel contesto dell'ARTROSI e possono non applicarsi ad altre condizioni."
+        ]
+      }
+    ]
+  },
+  {
+    id: 43,
+    category: "Rachide",
+    color: "#8B3A3A",
+    icon: "\u{1F9B4}",
+    title: "Lombalgia e Sindrome Radicolare Lombosacrale \u2014 Linea Guida KNGF 2024",
+    source: "Apeldoorn et al. | Eur J Phys Rehabil Med 2024;60(2):292-318 | Royal Dutch Society for Physical Therapy (KNGF) + VvOCM",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC11112513/",
+    pdfUrl2: "https://doi.org/10.23736/S1973-9087.24.08352-7",
+    tags: ["rachide", "lombalgia", "LBP", "sciatica", "radicolare", "LRS", "profili di trattamento", "STarT Back", "CPG"],
+    summary: "Linea guida fisioterapica olandese su lombalgia E sindrome radicolare lombosacrale (LRS) senza bandiere rosse, per pazienti sopra i 16 anni. Costruita sulla NICE con metodologia GRADE. Il cuore operativo sono i TRE PROFILI DI TRATTAMENTO basati sul rischio di persistenza, non sulla durata dei sintomi. \u26A0\uFE0F Abbandona la classificazione acuto/subacuto/cronico e il termine 'lombalgia aspecifica'.",
+    sections: [
+      {
+        title: "I Tre Profili di Trattamento \u2014 Cuore della Guida",
+        content: [
+          "\u26A0\uFE0F CAMBIO DI PARADIGMA: la guida del 2013 classificava per DECORSO, quella attuale classifica per RISCHIO DI PERSISTENZA valutato al primo contatto. Motivo: un decorso anomalo si pu\u00F2 constatare solo dopo che \u00E8 passato del tempo, e questo impone un'attesa che ritarda il trattamento corretto in chi \u00E8 gi\u00E0 ad alto rischio.",
+          "\u26A0\uFE0F LA DURATA NON DETERMINA IL PROFILO. L'evidenza sulla durata come fattore prognostico \u00E8 conflittuale. La lombalgia \u00E8 considerata una condizione di lunga durata a decorso variabile, non una serie di episodi scollegati: conta il rischio di esito sfavorevole in qualsiasi momento, non da quanto tempo dura.",
+          "\u2500\u2500\u2500 PROFILO 1 \u2014 BASSO RISCHIO \u2500\u2500\u2500",
+          "Nessun fattore prognostico DOMINANTE di recupero ritardato.",
+          "\u2705 TRATTAMENTO: informazione e consiglio, istruzioni per esercizi da svolgere autonomamente.",
+          "\u26A0\uFE0F NUMERO DI SEDUTE LIMITATO A UN MASSIMO DI TRE.",
+          "\u26A0\uFE0F NON eseguire mobilizzazioni n\u00E9 manipolazioni in questo profilo.",
+          "\u2500\u2500\u2500 PROFILO 2 \u2014 RISCHIO MODERATO \u2500\u2500\u2500",
+          "Presenti alcuni fattori prognostici NON dominanti di recupero ritardato.",
+          "\u2705 TRATTAMENTO: offrire terapia con esercizio (raccomandazione FORTE). Spiegazione approfondita e focus sul modello biopsicosociale sono sufficienti sul piano comportamentale.",
+          "Nessun range di sedute definito: la valutazione congiunta di paziente e terapista decide quando concludere.",
+          "\u2500\u2500\u2500 PROFILO 3 \u2014 ALTO RISCHIO \u2500\u2500\u2500",
+          "Presenti fattori prognostici DOMINANTI di recupero ritardato.",
+          "\u2705 TRATTAMENTO: esercizio (raccomandazione FORTE) + educazione al dolore se c'\u00E8 paura del movimento irrealistica e/o catastrofizzazione + trattamento orientato al comportamento se ci sono fattori psicosociali dominanti.",
+          "\u26A0\uFE0F I pazienti con LRS hanno pi\u00F9 probabilit\u00E0 di ricadere nel profilo 3, perch\u00E9 presentano pi\u00F9 spesso fattori dominanti: alto grado di limitazione nelle attivit\u00E0, dolore alla gamba e alta intensit\u00E0 di dolore.",
+          "\u2500\u2500\u2500 DEFINIZIONE DI 'DOMINANTE' \u2500\u2500\u2500",
+          "Un fattore \u00E8 dominante quando contribuisce in modo importante a perpetuare il dolore e/o le limitazioni del funzionamento fisico.",
+          "\u2500\u2500\u2500 START BACK SCREENING TOOL \u2500\u2500\u2500",
+          "Raccomandazione CONDIZIONALE: considerare l'uso dello SBST a supporto della valutazione del rischio. \u26A0\uFE0F MAI basare la valutazione esclusivamente sullo SBST.",
+          "MOTIVO: gli effetti del trattamento stratificato con SBST sono piccoli e non clinicamente rilevanti rispetto al trattamento senza stratificazione, e importanti fattori prognostici \u2014 in particolare quelli LAVORO-CORRELATI \u2014 possono sfuggire.",
+          "\u26A0\uFE0F NON RACCOMANDATI: il sistema di classificazione di Delitto (CBT) e la Cognitive Functional Therapy di O'Sullivan (CB-CFT), per mancanza di evidenza scientifica, incertezze sulle propriet\u00E0 psicometriche e limiti di fattibilit\u00E0."
+        ]
+      },
+      {
+        title: "Fattori Prognostici da Valutare",
+        content: [
+          "RACCOMANDAZIONE FORTE: valutare i seguenti fattori prognostici di persistenza gi\u00E0 durante l'anamnesi. Il razionale \u00E8 esplicito: lo sforzo richiesto \u00E8 minimo e l'informazione ottenuta \u00E8 decisiva per il processo decisionale.",
+          "\u2500\u2500\u2500 FATTORI LEGATI ALLA LOMBALGIA \u2500\u2500\u2500",
+          "Episodi precedenti di lombalgia o LRS",
+          "Alto grado di limitazione nelle attivit\u00E0",
+          "Dolore alla gamba",
+          "Alta intensit\u00E0 di dolore",
+          "\u2500\u2500\u2500 FATTORI LEGATI AL PAZIENTE \u2500\u2500\u2500",
+          "Cattivo stato di salute generale o bassa qualit\u00E0 di vita",
+          "\u2500\u2500\u2500 FATTORI PSICOSOCIALI \u2500\u2500\u2500",
+          "Stress psicologico e psicosociale (derivante dalla lombalgia, senza diagnosi psicologica o psichiatrica specifica)",
+          "Paura del movimento legata al dolore",
+          "Sentimenti o sintomi depressivi",
+          "Stile di coping passivo",
+          "Aspettative negative sul recupero o catastrofizzazione",
+          "\u2500\u2500\u2500 FATTORI LAVORO-CORRELATI \u2500\u2500\u2500",
+          "Alto grado di carico fisico sul lavoro",
+          "Cattivi rapporti con i colleghi",
+          "Ridotta soddisfazione lavorativa",
+          "\u2192 Tre fattori su quattordici riguardano il lavoro: sono quelli che gli strumenti di screening tendono a mancare.",
+          "\u2500\u2500\u2500 STRUMENTI DI MISURA \u2500\u2500\u2500",
+          "Considerare l'uso di strumenti di misura nell'analisi dei fattori prognostici. \u26A0\uFE0F Per la maggior parte degli strumenti NON esistono valori soglia rigidi, e l'uso di cut-off rigidi NON \u00E8 raccomandato.",
+          "\u2500\u2500\u2500 L'ELENCO NON \u00C8 ESAUSTIVO \u2500\u2500\u2500",
+          "Il documento invita a usare l'esperienza clinica per identificare altri fattori, sia che FAVORISCONO il recupero (raggiungere la quantit\u00E0 di movimento settimanale raccomandata, buon supporto sociale) sia che lo OSTACOLANO (dolore in altre sedi, ridotta capacit\u00E0 per comorbidit\u00E0).",
+          "\u26A0\uFE0F LIMITE DICHIARATO: mancano quasi del tutto informazioni sui fattori prognostici che predicono un BUON recupero. I profili si basano solo su fattori sfavorevoli."
+        ]
+      },
+      {
+        title: "Informazione, Educazione e Specifico LRS",
+        content: [
+          "\u2500\u2500\u2500 TERMINOLOGIA \u2014 RACCOMANDAZIONE ESPLICITA \u2500\u2500\u2500",
+          "\u26A0\uFE0F USARE IL TERMINE 'LOMBALGIA' ED EVITARE IL TERMINE 'ASPECIFICA'. Nell'analisi delle barriere i fisioterapisti hanno segnalato che 'aspecifico' non rende giustizia al disturbo del paziente e pu\u00F2 evocare un'associazione negativa.",
+          "\u26A0\uFE0F EVITARE il linguaggio che alimenta paura del dolore e pensiero catastrofico: termini come LESIONE, DEGENERAZIONE, USURA.",
+          "\u2500\u2500\u2500 CONTENUTO DELL'INFORMAZIONE \u2500\u2500\u2500",
+          "NATURA: spiegare che spesso non \u00E8 chiaro come esattamente insorga la lombalgia e che di solito \u00E8 presente una combinazione di fattori.",
+          "DECORSO: spiegare che la lombalgia \u00E8 frequente e ricorre spesso, che severit\u00E0 e durata possono variare a ogni episodio, e che DOPO TRE MESI CIRCA LA MET\u00C0 DEI PAZIENTI \u00C8 LIBERA DAL DOLORE con funzionamento fisico recuperato.",
+          "FATTORI: spiegare che il recupero pu\u00F2 essere accelerato restando attivi e limitando il riposo a letto, con autogestione, strategie di coping attive, emozioni positive e stile di vita sano.",
+          "DIAGNOSI: spiegare che la grande maggioranza delle persone con lombalgia non ha indicazioni di condizioni rare sottostanti, e che l'imaging NON \u00E8 raccomandato in assenza di segnali d'allarme.",
+          "\u26A0\uFE0F ATTENZIONE SULLA RASSICURAZIONE: il messaggio rassicurante sulla buona prognosi \u00E8 adeguato soprattutto per chi mostra poco stress e ha un pattern di risposta al dolore adattivo. Per altri gruppi di pazienti pu\u00F2 essere INSUFFICIENTE O PERSINO CONTROPRODUCENTE.",
+          "\u2500\u2500\u2500 EDUCAZIONE AL DOLORE \u2500\u2500\u2500",
+          "Considerare l'educazione al dolore in aggiunta a informazione e consiglio per i pazienti del PROFILO 3, se c'\u00E8 paura del movimento irrealistica e/o catastrofizzazione.",
+          "\u2500\u2500\u2500 SPECIFICO PER LRS \u2500\u2500\u2500",
+          "NATURA: spiegare che la LRS \u00E8 caratterizzata dalla stimolazione di una radice nervosa, di solito per ernia discale, e CHE L'ERNIA SI RIASSORBE DA SOLA NELLA MAGGIOR PARTE DEI CASI.",
+          "PROGNOSI: spiegare che la LRS recupera significativamente nella maggioranza dei pazienti nei primi tre mesi, SENZA necessit\u00E0 di intervento chirurgico. Il tasso di recupero a un anno \u00E8 stimato tra il 44% e il 65%.",
+          "\u26A0\uFE0F IMAGING: spiegare che dimostrare un'ernia con la RM NON ha valore aggiunto nel trattamento conservativo.",
+          "\u26A0\uFE0F In circa un terzo dei pazienti con diagnosi di LRS NON si osserva compressione radicolare alla RM.",
+          "MOVIMENTO: consigliare di continuare a muoversi e svolgere le attivit\u00E0 quotidiane, lavoro compreso, se i sintomi lo permettono. Qualche giorno di riposo a letto \u00E8 un'opzione se il movimento esacerba fortemente i sintomi, MA IL RIPOSO NON CONTRIBUISCE A UN RECUPERO PI\u00D9 RAPIDO.",
+          "\u2500\u2500\u2500 IRRITABILIT\u00C0 NELLA LRS \u2014 DEFINIZIONE OPERATIVA \u2500\u2500\u2500",
+          "ALTA IRRITABILIT\u00C0: ROM in flessione lombare tra 0 e 30 gradi | dolore costante alla gamba | dolore notturno | dolore o rigidit\u00E0 mattutina oltre i 60 minuti | camminare una breve distanza NON allevia il dolore.",
+          "MODERATA IRRITABILIT\u00C0: dolore moderato intermittente, con aumento di dolore di breve durata (parte di una giornata) considerato accettabile.",
+          "\u2705 TEMPISTICA: se i sintomi non sono sufficientemente migliorati dopo 6-8 SETTIMANE, inviare al medico per discutere le opzioni.",
+          "\u2705 CONTROLLO: rivalutare i pazienti con LRS dopo 2-4 GIORNI.",
+          "\u2500\u2500\u2500 RED FLAG \u2014 CONTATTO IMMEDIATO CON IL MEDICO \u2500\u2500\u2500",
+          "\u26A0\uFE0F Anestesia a sella | perdita involontaria di urina o feci, oppure incapacit\u00E0 di urinare | perdita crescente di forza muscolare alle gambe.",
+          "\u26A0\uFE0F FUORI AMBITO: la guida NON si applica a pazienti con sindrome della cauda equina, LRS con deficit motorio severo (MRC \u22643/5) e/o dolore severo (NPRS \u22658)."
+        ]
+      },
+      {
+        title: "Esercizio, Comportamento, Terapia Manuale",
+        content: [
+          "\u2500\u2500\u2500 TERAPIA CON ESERCIZIO \u2500\u2500\u2500",
+          "PROFILI 2 e 3: OFFRIRE terapia con esercizio (raccomandazione FORTE).",
+          "PROFILO 1: considerare istruzioni per esercizi da eseguire autonomamente (raccomandazione condizionale).",
+          "\u26A0\uFE0F QUALE ESERCIZIO: la letteratura NON indica che una forma di esercizio sia pi\u00F9 efficace di un'altra. La scelta migliore si basa su bisogni, preferenze e capacit\u00E0 del paziente e su conoscenze e abilit\u00E0 del terapista.",
+          "\u26A0\uFE0F MOTOR CONTROL EXERCISES: nessuna differenza clinicamente rilevante rispetto ad altre forme di esercizio o alla terapia manuale, n\u00E9 a breve n\u00E9 a lungo termine.",
+          "\u26A0\uFE0F McKENZIE (MDT): tutte e sei le revisioni sistematiche sono di qualit\u00E0 metodologica criticamente bassa. Nessun effetto clinicamente rilevante su dolore e funzione nella lombalgia cronica; effetto a lungo termine sconosciuto.",
+          "EVIDENZA COMPLESSIVA: nella lombalgia CRONICA l'esercizio produce effetti clinicamente rilevanti su dolore e funzione a breve termine rispetto a nessun esercizio, con certezza moderata. Nella lombalgia ACUTA e SUBACUTA NON sono stati trovati effetti clinicamente rilevanti.",
+          "\u2705 PROGRESSIONE: incoraggiare il paziente a riprendere o ampliare le attivit\u00E0, preferibilmente in modo graduale e TIME-CONTINGENT \u2014 secondo il tempo programmato, non secondo il dolore percepito.",
+          "GRUPPO: considerare l'esercizio di gruppo come proseguimento di una o pi\u00F9 sedute individuali, se il terapista stima che porti a un recupero pi\u00F9 rapido. Particolarmente utile nei percorsi pi\u00F9 lunghi, dove gli stimoli ripetuti e il contatto con altri pazienti contribuiscono al recupero.",
+          "\u2705 RIDUZIONE DELLA SUPERVISIONE: se possibile, ridurre la guida durante il trattamento, in accordo con il paziente. \u26A0\uFE0F IMPORTANTE: non diminuire frequenza e intensit\u00E0 dell'esercizio; sposta solo il focus sull'esercizio autonomo.",
+          "\u2500\u2500\u2500 ESERCIZIO NELLA LRS \u2500\u2500\u2500",
+          "Considerare l'esercizio in tutti i profili se c'\u00E8 bisogno di assistenza per limitazioni nelle attivit\u00E0 quotidiane o nella partecipazione sociale.",
+          "\u2705 ALTA IRRITABILIT\u00C0: focalizzarsi sull'alleviamento del dolore. MODERATA: aumento di dolore di breve durata accettabile.",
+          "\u2705 Se il progresso \u00E8 buono, espandere le attivit\u00E0 al livello precedente IN 6-12 SETTIMANE.",
+          "\u2500\u2500\u2500 TRATTAMENTO ORIENTATO AL COMPORTAMENTO \u2500\u2500\u2500",
+          "PROFILI 1 e 2: spiegazione approfondita e focus sul modello biopsicosociale sono SUFFICIENTI.",
+          "PROFILO 3: considerare il trattamento orientato al comportamento in presenza di fattori psicosociali dominanti, personalizzandolo sul fattore specifico. Focalizzarlo sull'incoraggiare il comportamento motorio con o nonostante il dolore.",
+          "\u2500\u2500\u2500 ABBINAMENTO FATTORE-TRATTAMENTO (opinione esperta) \u2500\u2500\u2500",
+          "Paura del movimento, catastrofizzazione con aspettativa di danno \u2192 ESPOSIZIONE",
+          "\u26A0\uFE0F L'esposizione si applica solo ai pensieri contestabili: se un pensiero non \u00E8 contestabile ('finir\u00F2 in sedia a rotelle', 'il dolore non passer\u00E0 mai'), l'esposizione NON \u00E8 possibile.",
+          "Coping passivo, catastrofizzazione con impotenza \u2192 GRADED ACTIVITY, terapia cognitivo-comportamentale (ACT compresa), colloquio motivazionale",
+          "Stress con difficolt\u00E0 a rilassarsi \u2192 TERAPIA DI RILASSAMENTO",
+          "Stress con medical shopping, volont\u00E0 di mantenere il controllo, frustrazione \u2192 terapia cognitivo-comportamentale, colloquio motivazionale",
+          "\u26A0\uFE0F Applicare SOLO le forme per cui si \u00E8 competenti e autorizzati. Non c'\u00E8 evidenza sufficiente per raccomandare terapie psicologiche ISOLATE.",
+          "\u2192 NOTA DEGLI AUTORI: con i trattamenti comportamentali i pazienti spesso riferiscono non meno dolore o migliore funzione, ma di saper gestire meglio il dolore, aver accettato la situazione e aver fatto spazio a pensieri di supporto e ad azioni di valore. Valutarne l'efficacia solo su dolore e funzione ne sottostima il beneficio.",
+          "\u2500\u2500\u2500 MOBILIZZAZIONI E MANIPOLAZIONI \u2500\u2500\u2500",
+          "\u26A0\uFE0F PROFILO 1: NON eseguire mobilizzazioni n\u00E9 manipolazioni.",
+          "PROFILI 2 e 3: considerarle SOLO COME SUPPLEMENTO all'esercizio, e solo se il problema \u00E8 di natura MECCANICA per disturbi del sistema neuromuscoloscheletrico (ridotta mobilit\u00E0 regionale in flessione o estensione lombare, end-feel rigido, aumentata tensione muscolare).",
+          "\u26A0\uFE0F NON eseguirle come intervento singolo, n\u00E9 se non si \u00E8 competenti e autorizzati a determinare indicazioni e controindicazioni.",
+          "\u26A0\uFE0F PREFERIBILMENTE NON eseguirle nei pazienti con LRS: hanno maggiore probabilit\u00E0 di effetti collaterali, anche seri, come aumento considerevole del dolore e deficit motorio.",
+          "\u2705 VALUTARE gli effetti IMMEDIATAMENTE nella seduta e all'inizio della successiva. Essere allerta per effetti avversi seri e rari.",
+          "\u26A0\uFE0F LA DURATA DEI SINTOMI NON DEVE GUIDARE LA DECISIONE: non sono state trovate differenze di risultato tra lombalgia a breve termine e persistente.",
+          "MANIPOLAZIONE CONTRO MOBILIZZAZIONE: la manipolazione appare pi\u00F9 efficace su dolore (effetto piccolo, non clinicamente rilevante) e funzionalit\u00E0 (effetto clinicamente rilevante), sia a breve sia a lungo termine, ma con certezza da bassa a molto bassa. La scelta \u00E8 lasciata all'esperienza del terapista.",
+          "\u2192 OSSERVAZIONE METODOLOGICA DEGLI AUTORI: quasi tutti gli studi hanno selezionato i pazienti sulla base della PRESENZA DI LOMBALGIA senza verificare se ci fossero anche problemi neuromuscoloscheletrici. Il dolore potrebbe non essere un criterio adeguato per decidere se somministrare mobilizzazioni."
+        ]
+      }
+    ]
+  },
+  {
+    id: 44,
+    category: "Ematologia",
+    color: "#8C2F39",
+    icon: "\u{1FA78}",
+    title: "Trombosi Venosa Profonda Acuta \u2014 Confronto tra Linee Guida Internazionali 2026",
+    source: "Gonzalez-Ochoa et al. | J Clin Med 2026;15(16):6201 | Revisione narrativa strutturata, accesso aperto (CC BY)",
+    pdfUrl: "https://doi.org/10.3390/jcm15166201",
+    tags: ["TVP", "trombosi venosa profonda", "DVT", "tromboembolismo", "anticoagulanti", "DOAC", "D-dimero", "Wells", "compressione", "red flag"],
+    summary: "Revisione comparativa delle principali linee guida internazionali sulla TVP acuta \u2014 ASH, CHEST, ESVS, ESC, NICE, ISTH, JCS/JPCPHS e International Consensus Statement. Identifica aree di consenso, divergenze e lacune di evidenza. \u26A0\uFE0F Rilevante per il fisioterapista soprattutto come RED FLAG e nella gestione post-immobilizzazione e post-chirurgica; la terapia anticoagulante resta di competenza medica.",
+    sections: [
+      {
+        title: "Aree di Consenso Internazionale",
+        content: [
+          "\u2500\u2500\u2500 DIAGNOSI \u2014 CONSENSO FORTE \u2500\u2500\u2500",
+          "Tutte le linee guida raccomandano di COMBINARE tre elementi: PROBABILIT\u00C0 CLINICA PRE-TEST, D-DIMERO ed ECOGRAFIA CON COMPRESSIONE, per migliorare l'accuratezza diagnostica e ridurre imaging e anticoagulazione non necessari.",
+          "\u2192 NICE preferisce uno score di Wells strutturato a due livelli con tempistiche diagnostiche definite. ASH, CHEST, ESVS e l'International Consensus Statement consentono maggiore adattamento alla prevalenza e alla pratica locale.",
+          "ECOGRAFIA CON COMPRESSIONE: universalmente riconosciuta come modalit\u00E0 di imaging di PRIMA LINEA.",
+          "\u26A0\uFE0F DIVERGENZA SULLA STRATEGIA: ESVS, ISTH e ICS preferiscono l'ecografia dell'INTERA GAMBA; CHEST e NICE sostengono un imaging iniziale PROSSIMALE con ripetizione dell'esame se il sospetto clinico persiste.",
+          "\u2192 La differenza riflette variazioni di competenza, disponibilit\u00E0 di risorse e preoccupazione per l'individuazione di TVP distali isolate di significato clinico incerto.",
+          "TC o RM VENOGRAFIA: riservate al sospetto di trombosi iliaca, pelvica o cavale. La venografia invasiva \u00E8 usata principalmente durante le procedure endovascolari.",
+          "\u2500\u2500\u2500 TERAPIA INIZIALE \u2014 CONSENSO \u2500\u2500\u2500",
+          "I DOAC (anticoagulanti orali diretti) sono raccomandati come trattamento iniziale di scelta per la maggior parte dei pazienti con TVP prossimale acuta, per efficacia, sicurezza, praticit\u00E0 e minore necessit\u00E0 di monitoraggio di laboratorio.",
+          "\u26A0\uFE0F ECCEZIONI in cui restano indicati eparina a basso peso molecolare, eparina non frazionata o antagonisti della vitamina K: gravidanza, disfunzione renale avanzata, sindrome da anticorpi antifosfolipidi tripla-positiva.",
+          "\u2500\u2500\u2500 DURATA \u2014 CONSENSO \u2500\u2500\u2500",
+          "Tutte le linee guida contemporanee raccomandano ALMENO TRE MESI di anticoagulazione per la TVP prossimale.",
+          "Il trattamento successivo va individualizzato secondo rischio di recidiva, rischio emorragico e fattori scatenanti persistenti.",
+          "\u2192 ASH, CHEST, ESVS, ESC e ICS usano terminologie diverse per le fasi di trattamento, ma sostengono tutte la rivalutazione periodica e l'anticoagulazione estesa quando clinicamente giustificata. Le differenze sono SEMANTICHE, non terapeutiche.",
+          "\u26A0\uFE0F ASPIRINA: pu\u00F2 essere considerata SOLO DOPO la sospensione dell'anticoagulazione, nei pazienti con tromboembolismo non provocato che non sono candidati all'anticoagulazione indefinita. \u00C8 SOSTANZIALMENTE MENO EFFICACE della terapia anticoagulante continuata e NON va considerata un'alternativa equivalente.",
+          "\u2500\u2500\u2500 GESTIONE AMBULATORIALE \u2014 CONSENSO \u2500\u2500\u2500",
+          "Ampio accordo internazionale sul fatto che la maggior parte dei pazienti clinicamente stabili con TVP non complicata possa essere trattata in sicurezza in regime AMBULATORIALE, quando siano disponibili anticoagulazione, educazione e follow-up affidabile.",
+          "RICOVERO generalmente riservato a: trombosi che minaccia l'arto, sintomi severi, alto rischio emorragico, comorbidit\u00E0 maggiori, supporto sociale inadeguato."
+        ]
+      },
+      {
+        title: "Aree di Divergenza e Lacune",
+        content: [
+          "\u2500\u2500\u2500 TERAPIA COMPRESSIVA \u2014 L'ASPETTO PI\u00D9 DIBATTUTO \u2500\u2500\u2500",
+          "\u26A0\uFE0F ASH e CHEST SCONSIGLIANO le calze elastiche di routine con il solo scopo di prevenire la sindrome post-trombotica.",
+          "\u26A0\uFE0F ESVS, ESC, JCS/JPCPHS e ICS SOSTENGONO la compressione precoce per il sollievo sintomatico e un uso selettivo a lungo termine.",
+          "\u2192 CHIAVE DI LETTURA: le due posizioni sono in larga misura COMPLEMENTARI, perch\u00E9 valutano esiti DIVERSI. Le prime guardano alla prevenzione della sindrome post-trombotica, le seconde al miglioramento di dolore, edema, funzione e qualit\u00E0 di vita.",
+          "\u2192 \u00C8 il punto di maggiore interesse fisioterapico: la compressione non previene la sindrome post-trombotica, ma migliora sintomi e funzione. Sono due obiettivi distinti e vanno dichiarati come tali al paziente.",
+          "\u2500\u2500\u2500 TVP DISTALE ISOLATA \u2500\u2500\u2500",
+          "\u26A0\uFE0F Resta una delle questioni pi\u00F9 dibattute, in particolare sul bilancio tra anticoagulazione immediata e SORVEGLIANZA ECOGRAFICA SERIATA in pazienti selezionati a basso rischio.",
+          "\u2500\u2500\u2500 INTERVENTO ENDOVASCOLARE \u2500\u2500\u2500",
+          "Trombolisi diretta da catetere e trombectomia meccanica NON sono raccomandate di routine, ma possono essere considerate in pazienti accuratamente selezionati con TVP ileo-femorale severa.",
+          "\u2192 ORIGINE DELLA DIVERGENZA: le linee guida ematologiche enfatizzano la prevenzione di recidiva e sanguinamento; quelle vascolari danno maggior peso al sollievo sintomatico, alla perviet\u00E0 venosa e alla prevenzione della morbilit\u00E0 post-trombotica.",
+          "\u2500\u2500\u2500 TROMBOSI ASSOCIATA A NEOPLASIA \u2500\u2500\u2500",
+          "L'eparina a basso peso molecolare resta opzione preferita nei pazienti con neoplasia gastrointestinale o genitourinaria attiva ad alto rischio di sanguinamento mucosale, interazioni clinicamente significative con le terapie antitumorali, trombocitopenia severa, apporto orale instabile o disfunzione renale avanzata.",
+          "\u2192 Le raccomandazioni dovrebbero distinguere sede del tumore, rischio emorragico atteso, farmaci concomitanti, funzione renale e stato ematologico, invece di presentare una strategia unica per tutti i pazienti oncologici.",
+          "\u2500\u2500\u2500 POPOLAZIONI SPECIALI \u2500\u2500\u2500",
+          "\u00C8 l'area di maggiore eterogeneit\u00E0. L'ISTH fornisce la guida pi\u00F9 completa su obesit\u00E0, gravidanza, trombofilia ereditaria, monitoraggio di laboratorio e trombosi associata a neoplasia.",
+          "\u26A0\uFE0F La maggior parte delle differenze osservate riflette variazioni di ambito e contesto sanitario, NON interpretazioni fondamentalmente opposte dell'evidenza disponibile.",
+          "\u2500\u2500\u2500 LACUNE DI EVIDENZA DICHIARATE \u2500\u2500\u2500",
+          "Gestione ottimale della TVP distale isolata.",
+          "Durata ottimale dell'anticoagulazione dopo la fase iniziale: le raccomandazioni attuali si basano ancora su ampie categorie cliniche piuttosto che su previsione individualizzata del rischio trombotico ed emorragico.",
+          "Biomarcatori e modelli predittivi: promettenti per la stratificazione del rischio, ma manca evidenza prospettica di miglioramento degli esiti."
+        ]
+      },
+      {
+        title: "Come Comportarsi Quando le Linee Guida Divergono",
+        content: [
+          "Questa sezione ha valore che va oltre la TVP: \u00E8 un metodo generale per interpretare linee guida in conflitto, applicabile a molte altre schede di questa app.",
+          "\u2500\u2500\u2500 QUATTRO CRITERI PROPOSTI DAGLI AUTORI \u2500\u2500\u2500",
+          "1. VERIFICARE LA CRONOLOGIA: chiedersi se nuova evidenza sia diventata disponibile DOPO la pubblicazione delle linee guida pi\u00F9 datate, e se quell'evidenza sia sufficientemente robusta da giustificare una modifica della pratica consolidata.",
+          "2. CONSIDERARE IL FRAMEWORK METODOLOGICO: le differenze vanno interpretate all'interno del quadro metodologico usato da ciascuna organizzazione. Societ\u00E0 diverse usano sistemi di grading diversi e pesano gli esiti in modo diverso.",
+          "3. INDIVIDUALIZZARE: sede del trombo, severit\u00E0 dei sintomi, rischio emorragico, fattori scatenanti, neoplasia attiva, gravidanza, funzione renale, fragilit\u00E0, aspettativa di vita e preferenze del paziente influenzano le decisioni PI\u00D9 di quanto facciano le differenze minori tra le raccomandazioni.",
+          "4. CONSIDERARE IL CONTESTO SANITARIO: raccomandazioni sviluppate in sistemi sanitari ad alte risorse possono non essere direttamente applicabili dove imaging rapido, follow-up specialistico, terapie endovascolari avanzate o accesso illimitato ai DOAC siano limitati.",
+          "\u2500\u2500\u2500 IL PRINCIPIO PI\u00D9 UTILE \u2500\u2500\u2500",
+          "\u26A0\uFE0F Le raccomandazioni sostenute principalmente da OPINIONE ESPERTA o da evidenza di BASSA CERTEZZA vanno considerate AREE DI INCERTEZZA SCIENTIFICA IN CORSO, non standard di cura definitivi.",
+          "\u2192 Richiedono rivalutazione periodica man mano che emerge nuova evidenza.",
+          "\u2192 \u00C8 lo stesso principio che regge la scheda 'Come Leggere i Gradi di Raccomandazione' in questa app.",
+          "\u2500\u2500\u2500 DECISIONE CONDIVISA \u2500\u2500\u2500",
+          "La decisione condivisa resta essenziale, in particolare quando l'evidenza \u00E8 limitata o quando pi\u00F9 opzioni terapeutiche basate sull'evidenza sono accettabili.",
+          "\u2500\u2500\u2500 DIREZIONI FUTURE \u2500\u2500\u2500",
+          "MODELLI PREDITTIVI in valutazione per bilanciare benefici e rischi dell'anticoagulazione estesa: HERDOO2, Vienna, DASH e VTE-BLEED.",
+          "BIOMARCATORI in studio: D-dimero, LDL, fattore VIII, ostruzione venosa residua, misure di generazione della trombina, marcatori infiammatori e indicatori di disfunzione endoteliale.",
+          "NUOVI FARMACI: gli inibitori del fattore XI e XIa \u2014 abelacimab, milvexian, asundexian, fesomersen \u2014 mirano selettivamente alla via intrinseca della coagulazione preservando in larga misura l'emostasi fisiologica, con effetti antitrombotici incoraggianti e tassi comparativamente bassi di sanguinamento clinicamente rilevante. \u26A0\uFE0F Restano SPERIMENTALI finch\u00E9 studi di fase III adeguatamente dimensionati non ne stabiliranno efficacia, sicurezza e costo-efficacia.",
+          "\u26A0\uFE0F INTELLIGENZA ARTIFICIALE: la maggior parte dei modelli disponibili \u00E8 stata sviluppata su dataset retrospettivi e non ha superato una validazione esterna prospettica rigorosa. Restano barriere su trasparenza degli algoritmi, bias, interoperabilit\u00E0, qualit\u00E0 dei dati e supervisione regolatoria.",
+          "\u2500\u2500\u2500 CONCLUSIONE DEGLI AUTORI \u2500\u2500\u2500",
+          "La guida internazionale contemporanea mostra una convergenza sostanziale sui principi fondamentali della gestione della TVP acuta, continuando a differire nelle aree sostenute da evidenza limitata o in evoluzione.",
+          "Le discrepanze riflettono principalmente differenze di tempistica di pubblicazione, framework metodologici, interpretazione dell'evidenza emergente e contesto del sistema sanitario, PIUTTOSTO CHE evidenza fondamentalmente in conflitto."
+        ]
+      }
+    ]
+  },
+  {
+    id: 45,
+    category: "Ematologia",
+    color: "#8C2F39",
+    icon: "\u{1F4AA}",
+    title: "Trombosi Venosa Profonda dell'Arto Superiore \u2014 CPG American Venous Forum 2026",
+    source: "Malgor et al. | J Vasc Surg Venous Lymphat Disord 2026;14(4):102461 | American Venous Forum",
+    pdfUrl: "https://doi.org/10.1016/j.jvsv.2025.102461",
+    tags: ["TVP", "arto superiore", "UEDVT", "Paget-Schroetter", "stretto toracico", "vTOS", "catetere venoso centrale", "red flag"],
+    summary: "Linea guida dell'American Venous Forum sulla trombosi venosa profonda dell'arto superiore (UEDVT). Copre classificazione, epidemiologia, modelli predittivi, diagnosi, profilassi e trattamento. \u26A0\uFE0F Documento CHIRURGICO-VASCOLARE: non contiene alcun capitolo su fisioterapia o riabilitazione. Rilevante per il fisioterapista come RED FLAG, in particolare nella sindrome dello stretto toracico venoso (vTOS) e negli atleti overhead.",
+    sections: [
+      {
+        title: "Classificazione e Diagnosi",
+        content: [
+          "\u2500\u2500\u2500 CLASSIFICAZIONE \u2500\u2500\u2500",
+          "\u26A0\uFE0F NON esiste un sistema di classificazione validato per la UEDVT. Manca una distinzione tra prossimale e distale analoga a quella dell'arto inferiore.",
+          "GUIDELINE 1.1 [BEST PRACTICE]: si suggerisce l'uso di una classificazione basata sull'EZIOLOGIA anzich\u00E9 su un sistema anatomico, per standardizzare la refertazione e il trattamento.",
+          "GUIDELINE 1.2 [GRADE 2, evidenza B]: si suggerisce di classificare la UEDVT in tre categorie \u2014 associata a vTOS, correlata a neoplasia, non correlata a neoplasia.",
+          "\u2500\u2500\u2500 PROBABILIT\u00C0 CLINICA \u2500\u2500\u2500",
+          "GUIDELINE 3.1 [GRADE 2, evidenza B]: la probabilit\u00E0 clinica va determinata con lo score di CONSTANS o CONSTANS ESTESO, da preferire al Wells modificato, e deve guidare le indagini successive.",
+          "\u2192 Differenza rilevante rispetto all'arto inferiore, dove il Wells resta lo strumento di riferimento.",
+          "\u2500\u2500\u2500 D-DIMERO \u2014 TRE RACCOMANDAZIONI DISTINTE \u2500\u2500\u2500",
+          "GUIDELINE 3.2 [GRADE 2, evidenza B]: nei pazienti con bassa probabilit\u00E0 agli score clinici, si suggerisce di NON eseguire il D-dimero, a meno che tutte le altre cause potenziali di edema acuto dell'arto superiore siano state escluse.",
+          "\u26A0\uFE0F GUIDELINE 3.3 [GRADE 2, evidenza B]: il D-dimero NON deve essere usato per escludere una UEDVT associata a neoplasia.",
+          "GUIDELINE 3.4 [GRADE 1, evidenza B]: nella UEDVT NON associata a neoplasia, il D-dimero con cut-off di 500 mg/L pu\u00F2 essere usato come test iniziale costo-efficace per escludere la diagnosi nei pazienti a bassa probabilit\u00E0 pre-test.",
+          "\u2500\u2500\u2500 IMAGING \u2500\u2500\u2500",
+          "GUIDELINE 4.1 [GRADE 1, evidenza B]: nei pazienti con sospetto clinico, l'ECOGRAFIA DUPLEX dell'arto superiore deve essere il primo esame di imaging diagnostico.",
+          "\u26A0\uFE0F GUIDELINE 4.2 [GRADE 1, evidenza B]: se si sospetta una UEDVT prossimale che coinvolge le VENE CENTRALI, va considerato che l'ecografia duplex in questo caso pu\u00F2 avere BASSA sensibilit\u00E0 e specificit\u00E0.",
+          "GUIDELINE 4.3 [GRADE 1, evidenza B]: lo screening per la UEDVT associata a catetere nei pazienti con accessi a permanenza a lungo termine va basato sulle politiche istituzionali partendo dall'ecografia duplex, MA NON deve essere eseguito di routine nei pazienti ASINTOMATICI.",
+          "GUIDELINE 4.4 [GRADE 1, evidenza B]: se l'ecografia iniziale \u00E8 negativa ma il sospetto clinico resta alto, si raccomanda indagine aggiuntiva con angio-RM venosa (MRV) o angio-TC venosa (CTV), per evitare ritardi nel trattamento.",
+          "GUIDELINE 4.5 [GRADE 2, evidenza B]: per mancanza di evidenza sulla CTV, si suggerisce la MRV come modalit\u00E0 avanzata preferita, quando disponibile.",
+          "GUIDELINE 4.6 [GRADE 2, evidenza B]: se gli studi non invasivi restano inconclusivi e il sospetto resta alto, la venografia pu\u00F2 essere considerata come passo successivo per diagnosticare e trattare in un'unica sessione, quando il paziente sia candidato alla rimozione endovascolare del trombo e dopo discussione approfondita di rischi e benefici.",
+          "GUIDELINE 4.7 [GRADE 1, evidenza B]: la venografia con catetere pu\u00F2 essere considerata per rivalutare il grado di stenosi o compressione delle vene dell'arto superiore dopo rimozione del trombo, se i sintomi persistono e con intenzione di trattare.",
+          "GUIDELINE 4.8 [GRADE 1, evidenza B]: l'ECOGRAFIA INTRAVASCOLARE (IVUS) supera la venografia nel valutare il grado di stenosi e andrebbe usata, quando possibile, per guidare il trattamento ed escludere stenosi residua durante gli interventi endovascolari."
+        ]
+      },
+      {
+        title: "Profilassi e Trattamento",
+        content: [
+          "\u2500\u2500\u2500 PROFILASSI \u2014 QUATTRO RACCOMANDAZIONI NEGATIVE SU CINQUE \u2500\u2500\u2500",
+          "\u26A0\uFE0F GUIDELINE 5.1 [GRADE 1, evidenza A]: si raccomanda CONTRO i dispositivi di compressione meccanica intermittente come unica manovra profilattica per la prevenzione della UEDVT.",
+          "\u2192 \u00C8 la raccomandazione con il livello di evidenza pi\u00F9 alto dell'intero documento, insieme alla 5.4.",
+          "\u26A0\uFE0F GUIDELINE 5.2 [GRADE 1, evidenza B]: si raccomanda CONTRO l'uso della profilassi farmacomeccanica quando la UEDVT associata a vTOS \u00E8 gi\u00E0 confermata.",
+          "\u26A0\uFE0F GUIDELINE 5.3 [GRADE 1, evidenza B]: si raccomanda di EVITARE la profilassi meccanica con dispositivi a compressione intermittente nella UEDVT associata a catetere.",
+          "\u26A0\uFE0F GUIDELINE 5.4 [GRADE 1, evidenza A]: si raccomanda CONTRO la profilassi anticoagulante di routine per prevenire la UEDVT nei pazienti con cateteri venosi centrali a lungo termine.",
+          "\u2705 GUIDELINE 5.5 [GRADE 1, evidenza B]: si raccomanda la profilassi anticoagulante nei pazienti con rischio tromboembolico da MODERATO AD ALTO e cateteri venosi centrali a lungo termine. Va eseguita un'analisi rischio-beneficio basata su rischio tromboembolico e rischio emorragico a supporto della decisione.",
+          "\u2192 SINTESI: profilassi NON di routine, ma mirata su chi ha rischio moderato-alto. La compressione meccanica non ha ruolo profilattico in questo distretto.",
+          "\u2500\u2500\u2500 TRATTAMENTO \u2500\u2500\u2500",
+          "GUIDELINE 6.1 [GRADE 1, evidenza B]: la UEDVT va trattata con INIBITORI ORALI DEL FATTORE Xa piuttosto che con antagonisti della vitamina K, per ALMENO 3 MESI, nei pazienti a basso rischio emorragico.",
+          "GUIDELINE 6.2 [GRADE 1, evidenza B]: nei pazienti con PRIMO episodio NON PROVOCATO di UEDVT vanno considerate e indagate le cause sottostanti, in particolare NEOPLASIA e DISTURBI DELLA IPERCOAGULABILIT\u00C0.",
+          "\u2192 Implicazione clinica rilevante: una UEDVT apparentemente spontanea impone la ricerca di una patologia sottostante.",
+          "GUIDELINE 6.3 [GRADE 2, evidenza B]: la UEDVT acuta estesa (meno di 21 giorni) pu\u00F2 essere trattata con strategie di RIMOZIONE PRECOCE DEL TROMBO nei pazienti severamente sintomatici con aspettativa di vita superiore a 1 anno, per ridurre l'incidenza di sindrome post-trombotica.",
+          "\u2705 GUIDELINE 6.4 [GRADE 1, evidenza B]: la gestione della UEDVT associata a vTOS con reperti di imaging compatibili deve includere la RESEZIONE DELLA PRIMA COSTA.",
+          "\u2192 \u00C8 la raccomandazione che pi\u00F9 distingue questo quadro: nel vTOS il trattamento non \u00E8 solo anticoagulante, ma chirurgico decompressivo.",
+          "GUIDELINE 6.5 [GRADE 1, evidenza B]: la UEDVT associata a neoplasia va trattata con anticoagulazione e, se il catetere a permanenza non \u00E8 pi\u00F9 necessario o un accesso alternativo \u00E8 praticabile, \u00E8 indicata la rimozione del catetere; altrimenti il catetere pu\u00F2 restare in sede.",
+          "GUIDELINE 6.6 [GRADE 1, evidenza B]: la UEDVT non associata a neoplasia va trattata con anticoagulazione per ALMENO 3 MESI nei pazienti con rischio emorragico accettabilmente basso.",
+          "GUIDELINE 6.7 [GRADE 2, evidenza C]: gli interventi invasivi per la UEDVT non associata a neoplasia possono essere considerati se il paziente \u00E8 altamente sintomatico, ha basso rischio chirurgico e aspettativa di vita superiore a 1 anno.",
+          "GUIDELINE 6.8 [GRADE 2, evidenza C]: in pazienti altamente selezionati con controindicazione assoluta all'anticoagulazione ed elevato rischio di embolia polmonare potenzialmente fatale, pu\u00F2 essere considerato il posizionamento di un FILTRO CAVALE SUPERIORE TEMPORANEO.",
+          "\u2500\u2500\u2500 LEGENDA DEL SISTEMA DI GRADING \u2500\u2500\u2500",
+          "GRADE 1 (forte) \u2014 formulazione 'raccomandiamo' | GRADE 2 (debole) \u2014 formulazione 'suggeriamo'",
+          "LIVELLO DI EVIDENZA: A (alta qualit\u00E0) | B (qualit\u00E0 moderata) | C (bassa qualit\u00E0)",
+          "\u26A0\uFE0F La quasi totalit\u00E0 delle raccomandazioni poggia su evidenza di livello B. Solo due raggiungono il livello A, ed entrambe sono raccomandazioni NEGATIVE sulla profilassi.",
+          "\u2192 Confronta con la scheda 'Come Leggere i Gradi di Raccomandazione' per il confronto tra questo sistema e quelli APTA, AAOS e ACR usati nelle altre guide di questa app."
+        ]
+      }
+    ]
+  },
+  {
+    id: 46,
+    category: "Rachide",
+    color: "#8B3A3A",
+    icon: "\u{1FAC1}",
+    title: "Dolore del Complesso Sacroiliaco \u2014 Consensus Internazionale Multispecialistico 2025",
+    source: "McCormick, Cohen et al. | Reg Anesth Pain Med 2025 (co-pubblicato su Pain Medicine) | Gruppo di lavoro internazionale multispecialistico",
+    pdfUrl: "https://doi.org/10.1136/rapm-2025-107387",
+    tags: ["sacroiliaca", "SIJ", "rachide", "lombalgia", "test di provocazione", "FABER", "legamenti dorsali", "infiltrazioni", "radiofrequenza"],
+    summary: "Linee guida di consenso di un gruppo di lavoro internazionale multispecialistico sul dolore del COMPLESSO sacroiliaco, che comprende sia la componente INTRA-ARTICOLARE sia i LEGAMENTI DORSALI. \u26A0\uFE0F Documento prodotto da specialisti della terapia del dolore: la parte interventistica \u00E8 prevalente, mentre il trattamento conservativo poggia su evidenza indiretta di bassa qualit\u00E0. Rilevante per capire perch\u00E9 i test di provocazione hanno il valore che hanno e cosa attendersi dal percorso del paziente.",
+    sections: [
+      {
+        title: "Il Concetto di Complesso e l'Epidemiologia",
+        content: [
+          "\u26A0\uFE0F CAMBIO CONCETTUALE: il documento parla di 'COMPLESSO sacroiliaco' e non di 'articolazione sacroiliaca'. La distinzione \u00E8 sostanziale perch\u00E9 il dolore pu\u00F2 originare da due fonti diverse, che richiedono approcci diagnostici e terapeutici diversi.",
+          "COMPONENTE INTRA-ARTICOLARE (IA): la porzione sinoviale dell'articolazione vera e propria.",
+          "COMPONENTE EXTRA-ARTICOLARE (EA): i LEGAMENTI DORSALI. L'articolazione \u00E8 coperta dorsalmente da QUATTRO STRATI di legamenti sacroiliaci e muscoli, che possono essere essi stessi generatori di dolore.",
+          "\u2192 Le cause extra-articolari di dolore dal complesso sacroiliaco sono PROBABILMENTE COMUNI QUANTO quelle intra-articolari.",
+          "\u2500\u2500\u2500 PREVALENZA \u2500\u2500\u2500",
+          "Prevalenza della lombalgia cronica mediata dall'articolazione sacroiliaca: 15-30% nei pazienti con dolore assiale prevalentemente al di sotto di L5 [Grado B, certezza moderata].",
+          "\u26A0\uFE0F La prevalenza del dolore mediato dai legamenti dorsali \u00E8 SCONOSCIUTA, ma sulla base degli studi che confrontano la risposta a infiltrazioni intra ed extra-articolari appare almeno altrettanto comune di quello esclusivamente intra-articolare [Grado I, evidenza insufficiente].",
+          "\u2500\u2500\u2500 IL DATO PI\u00D9 RILEVANTE PER LA PRATICA \u2500\u2500\u2500",
+          "\u26A0\uFE0F POST-ARTRODESI LOMBARE: la prevalenza del dolore del complesso sacroiliaco \u00E8 sospettata essere PI\u00D9 ALTA nei pazienti con pregressa artrodesi lombare o lombosacrale, con stime tra il 33% e il 59% [Grado C, bassa certezza].",
+          "MECCANISMI IPOTIZZATI: stress del segmento adiacente con aumento di carico e forze di taglio che accelerano la degenerazione | dolore sacroiliaco preesistente o non riconosciuto PRIMA dell'artrodesi | violazione dei legamenti o del rivestimento sinoviale durante il prelievo di osso dalla cresta iliaca.",
+          "\u2192 IMPLICAZIONE CLINICA: in un paziente con lombalgia persistente dopo artrodesi lombare, il complesso sacroiliaco \u00E8 una fonte da considerare seriamente, non un'ipotesi residuale.",
+          "\u2500\u2500\u2500 FATTORI ASSOCIATI AL DOLORE LEGAMENTOSO \u2500\u2500\u2500",
+          "Dismetria degli arti inferiori | anomalie del cammino | esercizio vigoroso prolungato | scoliosi | artrodesi vertebrale."
+        ]
+      },
+      {
+        title: "Test di Provocazione \u2014 Cosa Dicono Davvero",
+        content: [
+          "\u2500\u2500\u2500 IL PRINCIPIO CHIAVE \u2500\u2500\u2500",
+          "\u26A0\uFE0F LA SPECIFICIT\u00C0 DEI TEST, SINGOLI E IN CLUSTER, \u00C8 INFERIORE ALLA SENSIBILIT\u00C0. I TEST NEGATIVI HANNO QUINDI MAGGIOR VALORE PREDITTIVO DI QUELLI POSITIVI [Grado A, ALTA certezza].",
+          "\u2192 \u00C8 la raccomandazione con il livello di evidenza pi\u00F9 alto dell'intero documento, e ha una conseguenza pratica precisa: i test di provocazione servono soprattutto a ESCLUDERE il complesso sacroiliaco, non a confermarlo.",
+          "\u2500\u2500\u2500 ACCURATEZZA DEI SINGOLI TEST (sensibilit\u00E0 / specificit\u00E0) \u2500\u2500\u2500",
+          "Sacral thrust test \u2014 57.3% / 48.8%",
+          "Thigh thrust (posterior shear) test \u2014 54.1% / 53.7%",
+          "FABER / test di Patrick \u2014 76.4% / 32.3%",
+          "Test di Gaenslen \u2014 47.9% / 47.9%",
+          "\u2192 Il FABER \u00E8 il pi\u00F9 sensibile ma il meno specifico: utile per escludere, quasi inutile per confermare.",
+          "\u2500\u2500\u2500 AFFIDABILIT\u00C0 TRA OPERATORI \u2500\u2500\u2500",
+          "L'affidabilit\u00E0 interrater dei test di provocazione mostra un'AMPIA VARIABILIT\u00C0, con alcuni dei test pi\u00F9 comuni \u2014 in particolare il FABER \u2014 che presentano l'affidabilit\u00E0 pi\u00F9 alta [Grado C, bassa certezza].",
+          "\u2500\u2500\u2500 VALORE PROGNOSTICO \u2500\u2500\u2500",
+          "Anamnesi ed esame obiettivo, inclusi i test di provocazione, possono aiutare a predire la risposta all'infiltrazione intra-articolare con anestetico locale con o senza corticosteroidi [Grado B, certezza moderata].",
+          "\u26A0\uFE0F Esistono per\u00F2 dati MINIMI sulla loro capacit\u00E0 di predire i risultati nei pazienti con patologia prevalentemente LEGAMENTOSA extra-articolare [Grado C, certezza da bassa a moderata].",
+          "\u2192 In altre parole: i test che conosciamo sono stati studiati soprattutto sulla componente articolare, e sulla componente legamentosa \u2014 che \u00E8 almeno altrettanto frequente \u2014 sappiamo molto poco.",
+          "\u2500\u2500\u2500 QUANDO PROCEDERE COMUNQUE \u2500\u2500\u2500",
+          "Variabili anamnestiche e segni all'esame obiettivo possono essere usati per selezionare i pazienti da avviare alle infiltrazioni diagnostiche. MA nei soggetti con forte sospetto clinico \u2014 per esempio con workup negativo per altre cause \u2014 le infiltrazioni intra-articolari possono essere ragionevoli ANCHE IN ASSENZA di test di provocazione positivi [Grado B, certezza moderata].",
+          "\u2500\u2500\u2500 PERCH\u00C9 LE INFILTRAZIONI DIAGNOSTICHE SONO DIFFICILI \u2500\u2500\u2500",
+          "\u26A0\uFE0F Solo il 15-30% dei pazienti con sospetto dolore del complesso sacroiliaco basato su anamnesi ed esame ottiene beneficio analgesico dall'infiltrazione intra-articolare di anestetico locale.",
+          "CAUSE: diagnosi errata, mancata diffusione dell'anestetico all'area generatrice del dolore, e altri fallimenti tecnici.",
+          "\u26A0\uFE0F Il tasso di FALSI POSITIVI delle infiltrazioni intra-articolari singole \u00E8 di circa il 20%, con range riportati del 19-22%.",
+          "\u2500\u2500\u2500 CAPACIT\u00C0 ARTICOLARE \u2014 DATO ANATOMICO \u2500\u2500\u2500",
+          "L'articolazione sacroiliaca ha una superficie di circa 17.5 cm\u00B2, ma la porzione sinoviale ha capacit\u00E0 ridotta.",
+          "Volumi trattenuti: 0.8-2.5 mL nei soggetti asintomatici, 1.0-2.7 mL nei sintomatici.",
+          "\u26A0\uFE0F Volumi superiori a 2.5 mL sono probabilmente NON SPECIFICI per diagnosticare la porzione articolare come generatore del dolore, a causa dello spandimento extra-articolare."
+        ]
+      },
+      {
+        title: "Trattamento Conservativo \u2014 Evidenza e Limiti",
+        content: [
+          "\u26A0\uFE0F PREMESSA ONESTA: quasi tutta l'evidenza sul conservativo in questo documento \u00E8 INDIRETTA \u2014 derivata cio\u00E8 dalla letteratura sulla lombalgia generica, non da studi specifici sul complesso sacroiliaco \u2014 e di bassa qualit\u00E0.",
+          "\u2500\u2500\u2500 FISIOTERAPIA ED ESERCIZIO STRUTTURATO \u2500\u2500\u2500",
+          "Esiste evidenza INDIRETTA che fisioterapia ed esercizio strutturato possano fornire beneficio a MEDIO TERMINE [Grado C, bassa certezza].",
+          "Una revisione sistematica ha esaminato tre tipi di intervento fisioterapico per ridurre dolore e disabilit\u00E0: ESERCIZIO, MANIPOLAZIONE o TERAPIA MANUALE, e KINESIO TAPING.",
+          "\u2192 L'ESERCIZIO \u00E8 risultato il pi\u00F9 efficace in termini di miglioramento di dolore e disabilit\u00E0.",
+          "\u26A0\uFE0F KINESIO TAPING: efficace nel ripristinare simmetria e posizione pelvica in uno studio NON controllato, ma INEFFICACE quando confrontato con placebo.",
+          "\u26A0\uFE0F TERAPIA MANUALE: una revisione sistematica con meta-analisi su 16 RCT e 421 pazienti NON ha mostrato riduzione del dolore, ma un effetto piccolo e significativo sulla riduzione della disabilit\u00E0.",
+          "\u26A0\uFE0F Solo uno dei nove studi identificati nella revisione sulla fisioterapia includeva un gruppo di controllo con placebo.",
+          "\u2500\u2500\u2500 CINTURA SACROILIACA \u2500\u2500\u2500",
+          "Esiste evidenza che le cinture sacroiliache possano fornire beneficio in ALCUNI pazienti [Grado C, bassa certezza].",
+          "RAZIONALE MECCANICO: uno studio su cadavere ha dimostrato una RIDUZIONE DEL 30% DELLA ROTAZIONE dell'articolazione con l'applicazione della cintura.",
+          "DATI CLINICI: uno studio prospettico su 17 pazienti con dolore confermato da infiltrazione, dopo 6 settimane di utilizzo, ha riportato miglioramenti significativi della qualit\u00E0 di vita, una PICCOLA riduzione del dolore, miglioramento di cammino e cadenza, ma NESSUNA variazione significativa dell'attivit\u00E0 muscolare eccetto una riduzione del tono del retto femorale.",
+          "\u2500\u2500\u2500 TERAPIA COGNITIVO-COMPORTAMENTALE \u2500\u2500\u2500",
+          "Evidenza indiretta che la CBT possa fornire beneficio nei pazienti con CONDIZIONI PSICOLOGICHE COMORBIDE [Grado C, bassa certezza].",
+          "\u26A0\uFE0F Un RCT molto ampio NON ha trovato beneficio della CBT erogata dal fisioterapista in combinazione con fisioterapia manuale intensiva per la transizione da lombalgia acuta a cronica [Grado B, certezza da bassa a moderata].",
+          "\u2500\u2500\u2500 TRATTAMENTO CHIROPRATICO \u2500\u2500\u2500",
+          "\u26A0\uFE0F Evidenza INSUFFICIENTE che il trattamento chiropratico sia efficace per il dolore del complesso sacroiliaco [Grado I].",
+          "\u2500\u2500\u2500 FARMACI \u2014 SINTESI DI ORIENTAMENTO \u2500\u2500\u2500",
+          "Evidenza indiretta a supporto di FANS e SNRI, ma NON di altri antidepressivi [Grado C, bassa certezza].",
+          "\u26A0\uFE0F Evidenza indiretta che il PARACETAMOLO sia INEFFICACE [Grado D, bassa certezza].",
+          "\u26A0\uFE0F Evidenza insufficiente a supporto dell'uso acuto di oppioidi, ed evidenza indiretta che suggerisce NESSUN BENEFICIO per la terapia con oppioidi a lungo termine [Grado D, bassa certezza].",
+          "\u2192 I gabapentinoidi non sono risultati efficaci per la lombalgia in una revisione sistematica.",
+          "\u2500\u2500\u2500 IL DIBATTITO SUL PRE-REQUISITO CONSERVATIVO \u2500\u2500\u2500",
+          "\u26A0\uFE0F I Centers for Medicare and Medicaid Services richiedono 4 SETTIMANE di trattamento conservativo prima di eseguire procedure sul complesso sacroiliaco.",
+          "C'\u00E8 per\u00F2 DISACCORDO tra le linee guida professionali: alcune raccomandano il trattamento conservativo sulla base di evidenza di bassa qualit\u00E0, altre raccomandano CONTRO l'imposizione di tale requisito, proprio per la mancanza di evidenza moderata o forte di efficacia.",
+          "\u2192 IL RAZIONALE DICHIARATO dell'uso di fatto del trattamento conservativo \u00E8 principalmente la presunzione che il dolore del complesso sacroiliaco, come molte condizioni muscoloscheletriche, migliori spontaneamente con il tempo, e che misure a basso rischio possano facilitarlo.",
+          "\u26A0\uFE0F \u00C8 una motivazione onesta ma debole, e il documento la presenta come tale. Chi lavora in riabilitazione dovrebbe esserne consapevole quando discute le aspettative con il paziente."
+        ]
+      }
+    ]
+  },
+  {
+    id: 2,
+    category: "Ginocchio",
+    color: "#0E6B5E",
+    icon: "\u{1F9BF}",
+    title: "Protesi Totale di Ginocchio (TKA) \u2014 CPG Revisione 2026",
+    source: "Bove et al. | Phys Ther 2026;106(7):pzag058 | APTA + AAOS Clinical Quality and Value Department",
+    pdfUrl: "https://academic.oup.com/ptj/article/106/7/pzag058/8742282",
+    pdfUrl2: "https://doi.org/10.1093/ptj/pzag058",
+    tags: ["ginocchio", "protesi", "TKA", "artroplastica", "post-operatorio", "NMES", "crioterapia", "CPG"],
+    summary: "Revisione 2026 della CPG per la gestione fisioterapica della protesi totale di ginocchio, sviluppata da APTA con il supporto metodologico AAOS. Aggiorna la versione 2020. Copre fisioterapia pre-operatoria, ROM, dolore, edema, attivit\u00E0 fisica, funzione motoria, NMES, forza, modalit\u00E0 di erogazione e setting di cura. \u26A0\uFE0F Include quattro raccomandazioni NEGATIVE su interventi da non usare di routine.",
+    sections: [
+      {
+        title: "Cosa NON Fare \u2014 Raccomandazioni Negative",
+        content: [
+          "Il documento identifica esplicitamente gli interventi che i fisioterapisti NON dovrebbero incorporare di routine nella gestione post-TKA. Sono il contributo pi\u00F9 immediato per rivedere un protocollo esistente.",
+          "\u2500\u2500\u2500 MOBILIZZAZIONE PASSIVA CONTINUA (CPM) \u2500\u2500\u2500",
+          "\u26A0\uFE0F I fisioterapisti NON DEVONO usare la CPM nei pazienti sottoposti a TKA primaria non complicata.",
+          "Qualit\u00E0 dell'evidenza: ALTA. Forza della raccomandazione: FORTE \u25C6\u25C6\u25C6\u25C6.",
+          "Base: 4 studi di alta qualit\u00E0 e 12 di qualit\u00E0 moderata.",
+          "\u2192 \u00C8 la raccomandazione negativa pi\u00F9 solida del documento: evidenza alta e forza forte.",
+          "\u2500\u2500\u2500 TUTORI E SPLINT \u2500\u2500\u2500",
+          "\u26A0\uFE0F I fisioterapisti NON DEVONO usare di routine tutori o splint nel periodo post-operatorio precoce per aumentare il ROM del ginocchio dopo TKA primaria non complicata.",
+          "Qualit\u00E0 dell'evidenza: moderata. Forza: MODERATA \u25C6\u25C6\u25C6\u25C7.",
+          "\u2500\u2500\u2500 DRENAGGIO LINFATICO, BENDAGGI COMPRESSIVI E CPM PER L'EDEMA \u2500\u2500\u2500",
+          "\u26A0\uFE0F In assenza di evidenza di qualit\u00E0 sufficiente, \u00E8 opinione del gruppo di lavoro che i fisioterapisti NON DEVONO usare di routine drenaggio linfatico manuale, bendaggi compressivi o CPM per ridurre l'edema post-operatorio dopo TKA: questi interventi non si sono dimostrati efficaci.",
+          "Qualit\u00E0 dell'evidenza: bassa. Forza: CONSENSO \u25C6\u25C7\u25C7\u25C7.",
+          "Base: 4 studi di qualit\u00E0 moderata \u2014 compressione 1 studio, drenaggio linfatico 2 studi in conflitto tra loro, CPM 1 studio.",
+          "\u2500\u2500\u2500 CONTROINDICAZIONI ALLA NMES \u2500\u2500\u2500",
+          "\u26A0\uFE0F La NMES NON deve essere usata in pazienti con pacemaker di tipo demand, cancro attivo o trombosi venosa profonda."
+        ]
+      },
+      {
+        title: "Pre-Operatorio, ROM e Dolore",
+        content: [
+          "\u2500\u2500\u2500 FISIOTERAPIA PRE-OPERATORIA \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO progettare e implementare programmi di esercizio pre-operatorio per i pazienti candidati a TKA, per migliorare gli esiti pre e post-operatori: FORZA, FLESSIBILIT\u00C0 ed ENDURANCE. L'educazione pre-operatoria PU\u00D2 incorporare anche strategie basate sulle neuroscienze del dolore, per aiutare a gestire il dolore e ridurre l'ansia legata alla procedura.",
+          "Qualit\u00E0 dell'evidenza: ALTA. Forza: MODERATA \u25C6\u25C6\u25C6\u25C7 (declassata per dati limitati sulle componenti educative e per effect size generalmente da piccoli a moderati).",
+          "Base: 12 studi di alta qualit\u00E0 e 32 di qualit\u00E0 moderata.",
+          "\u26A0\uFE0F LIMITE TEMPORALE: la riabilitazione pre-operatoria migliora gli esiti post-operatori PRECOCI (0-1.5 mesi) \u2014 forza, funzione, dolore \u2014 ma questi benefici tendono ad ATTENUARSI nel tempo, con evidenza limitata di effetti sostenuti a lungo termine.",
+          "Poca evidenza sul fatto che la preabilitazione incida su durata della degenza, riammissioni o tassi di revisione chirurgica.",
+          "\u2192 Gli esiti funzionali sono variabili: la maggioranza degli studi di alta qualit\u00E0 riporta risultati migliori nelle misure di performance, mentre quelli riferiti dal paziente sono meno consistenti.",
+          "\u26A0\uFE0F Nessuno studio ha dimostrato che l'esercizio pre-operatorio sia INFERIORE ad alternative o al nulla. L'evidenza \u00E8 per\u00F2 insufficiente a identificare una modalit\u00E0, un setting o un livello di supervisione superiore agli altri.",
+          "SICUREZZA: gli interventi pre-operatori appaiono sicuri, senza aumento riportato di complicanze o eventi avversi post-operatori.",
+          "\u2500\u2500\u2500 ROM \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO progettare e implementare interventi che includano esercizi di ROM PASSIVO, ATTIVO-ASSISTITO e ATTIVO, per ottimizzare il recupero e migliorare gli esiti funzionali del ginocchio operato.",
+          "Qualit\u00E0 dell'evidenza: moderata. Forza: MODERATA \u25C6\u25C6\u25C6\u25C7.",
+          "I fisioterapisti POSSONO usare terapia manuale con esercizio e/o dispositivi per potenziare l'esercizio attivo-assistito e migliorare il ROM nel periodo post-operatorio precoce.",
+          "Qualit\u00E0 dell'evidenza: moderata. Forza: DEBOLE \u25C6\u25C6\u25C7\u25C7 (declassata per evidenza limitata).",
+          "\u26A0\uFE0F SUI DISPOSITIVI: cicloergometri, macchine di movimento attivo e slide board sono stati valutati per l'impatto sul ROM. NESSUNO studio ha dimostrato che siano pi\u00F9 efficaci delle cure standard. Possono comunque essere considerati come opzioni.",
+          "\u2192 In uno studio di alta qualit\u00E0 che confrontava cure standard con l'aggiunta di slide board oppure CPM, tutti i gruppi miglioravano a 3 e 6 mesi senza differenze significative tra loro.",
+          "\u2500\u2500\u2500 DOLORE \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO insegnare e incoraggiare l'uso della CRIOTERAPIA per la gestione del dolore post-operatorio precoce dopo TKA.",
+          "Qualit\u00E0 dell'evidenza: moderata. Forza: MODERATA \u25C6\u25C6\u25C6\u25C7. Base: 18 studi di qualit\u00E0 moderata.",
+          "I fisioterapisti POSSONO usare TENS (fase acuta e subacuta), kinesio taping (fase acuta) e terapia manuale per la gestione del dolore.",
+          "Qualit\u00E0 dell'evidenza: moderata. Forza: DEBOLE \u25C6\u25C6\u25C7\u25C7."
+        ]
+      },
+      {
+        title: "Edema, Attivit\u00E0 Fisica, Funzione Motoria",
+        content: [
+          "\u2500\u2500\u2500 EDEMA \u2500\u2500\u2500",
+          "Per minimizzare il rischio di gonfiore post-operatorio immediato, i fisioterapisti e/o gli altri membri del team DOVREBBERO prescrivere la CRIOTERAPIA e insegnare il POSIZIONAMENTO DELL'ARTO OPERATO IN ELEVAZIONE CON 30-90 GRADI DI FLESSIONE DI GINOCCHIO nel periodo post-operatorio precoce.",
+          "Qualit\u00E0 dell'evidenza: ALTA. Forza: MODERATA \u25C6\u25C6\u25C6\u25C7 (declassata per certezza dell'evidenza).",
+          "Base: crioterapia 12 studi di qualit\u00E0 moderata; posizionamento dell'arto 2 studi di alta qualit\u00E0 e 3 di qualit\u00E0 moderata.",
+          "\u2192 La letteratura NON identifica una modalit\u00E0 di crioterapia superiore alle altre nel ridurre l'edema: vantaggi e svantaggi di ciascuna opzione vanno valutati caso per caso.",
+          "I fisioterapisti POSSONO considerare il kinesio taping dopo TKA non complicata per ridurre l'edema post-operatorio, ma l'evidenza sul beneficio \u00E8 CONTRASTANTE.",
+          "Qualit\u00E0 dell'evidenza: moderata. Forza: DEBOLE \u25C6\u25C6\u25C7\u25C7 (declassata per eterogeneit\u00E0).",
+          "\u2500\u2500\u2500 ATTIVIT\u00C0 FISICA \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO incoraggiare l'attivit\u00E0 fisica PRECOCE e sviluppare un piano per aumentarla PROGRESSIVAMENTE, sulla base di sicurezza, tolleranza funzionale, risposta fisiologica e DEFINIZIONE COLLABORATIVA DEGLI OBIETTIVI con il paziente.",
+          "Qualit\u00E0 dell'evidenza: moderata. Forza: MODERATA \u25C6\u25C6\u25C6\u25C7.",
+          "\u2192 Uno studio di alta qualit\u00E0 su veterani a 2-4 settimane dalla TKA ha usato un intervento di cambiamento comportamentale via telesalute \u2014 educazione, automonitoraggio, feedback, identificazione di barriere e facilitatori, problem solving, action planning, incoraggiamento \u2014 ottenendo pi\u00F9 passi giornalieri rispetto al controllo che riceveva lo stesso numero di sessioni ma centrate sulla sola educazione sanitaria.",
+          "\u2500\u2500\u2500 FUNZIONE MOTORIA \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO includere il TRAINING DELLA FUNZIONE MOTORIA nei loro interventi. Pu\u00F2 comprendere training dell'EQUILIBRIO DINAMICO, rieducazione del cammino assistita da computer o app, e training del movimento CON FEEDBACK.",
+          "Qualit\u00E0 dell'evidenza: ALTA. Forza: FORTE \u25C6\u25C6\u25C6\u25C6.",
+          "Base: 9 studi di alta qualit\u00E0 e 12 di qualit\u00E0 moderata.",
+          "\u2192 CONTENUTI DEGLI STUDI: molti includevano training di equilibrio e sensomotorio su superfici irregolari, esercizi di agilit\u00E0, basi di appoggio variabili. Molti incorporavano anche compiti funzionali in carico come passaggi seduto-in piedi e negoziazione delle scale.",
+          "\u2192 Gli interventi variavano da ambulatoriali a domiciliari e molti studi NON usavano attrezzatura specializzata."
+        ]
+      },
+      {
+        title: "NMES, Forza, Erogazione e Setting",
+        content: [
+          "\u2500\u2500\u2500 ELETTROSTIMOLAZIONE NEUROMUSCOLARE (NMES) \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO applicare la NMES ALMENO QUOTIDIANAMENTE al QUADRICIPITE, iniziando nel periodo post-operatorio precoce, ALLA MASSIMA INTENSIT\u00C0 TOLLERABILE, per migliorare forza del quadricipite, performance del cammino ed esiti basati sulla performance.",
+          "Qualit\u00E0 dell'evidenza: moderata. Forza: MODERATA \u25C6\u25C6\u25C6\u25C7.",
+          "PARAMETRI ASSOCIATI A ESITI MIGLIORI: iniziare dalla seconda giornata post-operatoria, applicarla 1-2 VOLTE AL GIORNO, e massimizzare l'INTENSIT\u00C0 CUMULATIVA.",
+          "DURATA MINIMA: la NMES va applicata regolarmente per ALMENO 3 SETTIMANE.",
+          "BENEFICI DOCUMENTATI: miglioramento della contrazione isometrica volontaria massima di quadricipite e ischiocrurali da 2 a 52 settimane dopo la TKA; miglioramento di cammino e salita delle scale.",
+          "\u26A0\uFE0F Il ROM post-operatorio NON differisce significativamente tra gruppi con e senza NMES.",
+          "\u2192 CHI NE BENEFICIA DI PI\u00D9: i pazienti con DEFICIT DI ATTIVAZIONE del quadricipite, spesso misurati come extensor lag o con batteria di attivazione.",
+          "LIMITI: costo, accesso alle unit\u00E0 NMES e tolleranza del paziente possono limitarne l'adozione. Il paziente va educato sui benefici e la decisione va presa in modello di decisione condivisa.",
+          "\u2500\u2500\u2500 TRAINING DI FORZA \u2500\u2500\u2500",
+          "I fisioterapisti DOVREBBERO progettare, implementare e insegnare programmi di TRAINING DI FORZA PROGRESSIVO ed esercizio, iniziando nel PERIODO POST-ACUTO PRECOCE, per migliorare funzione, forza e ROM.",
+          "Qualit\u00E0 dell'evidenza: ALTA. Forza: FORTE \u25C6\u25C6\u25C6\u25C6.",
+          "Base: 7 studi di alta qualit\u00E0 e 17 di qualit\u00E0 moderata a supporto dei programmi di esercizio resistivo progressivo su forza muscolare, performance funzionale ed equilibrio.",
+          "\u2192 PROGRAMMI CON BENEFICIO DIMOSTRATO: uso COMBINATO di esercizi a catena chiusa e aperta, uso COMBINATO di contrazioni eccentriche e concentriche. Tipo, intensit\u00E0, timing e modalit\u00E0 di erogazione variano tra gli studi, ma TUTTI hanno dimostrato beneficio.",
+          "\u2192 Uno studio ha rilevato che includere esercizi di stabilizzazione del core e training dell'equilibrio \u00E8 benefico per equilibrio, funzione e ROM.",
+          "\u26A0\uFE0F Serve ulteriore evidenza sul beneficio del training resistivo nelle fasi TARDIVE del recupero (oltre 2 mesi dall'intervento).",
+          "\u2500\u2500\u2500 MODALIT\u00C0 DI EROGAZIONE \u2500\u2500\u2500",
+          "SUPERVISIONE: nella CPG 2020 la fisioterapia supervisionata risultava superiore a quella non supervisionata. Gli studi pi\u00F9 recenti trovano invece esiti in gran parte EQUIVOCI, sebbene la riabilitazione ambulatoriale standard si associ a esiti funzionali migliori a 3 mesi rispetto a quella domiciliare.",
+          "GRUPPO CONTRO INDIVIDUALE: forza DEBOLE \u25C6\u25C6\u25C7\u25C7 (declassata per eterogeneit\u00E0 dei risultati e problemi di disegno). Un studio trova che l'esercizio di gruppo aggiunto alle cure usuali \u00E8 superiore alle sole cure usuali a 1 anno, ma non confrontava direttamente gruppo contro individuale.",
+          "STRUMENTI DIGITALI: i fisioterapisti e i pazienti DOVREBBERO considerare l'uso di strumenti di salute digitale dopo TKA, sia IN AGGIUNTA alle cure in clinica sia COME ALTERNATIVA.",
+          "Qualit\u00E0 dell'evidenza: ALTA. Forza: MODERATA \u25C6\u25C6\u25C6\u25C7 (declassata per ampia variazione degli interventi confrontati ed eterogeneit\u00E0 degli esiti).",
+          "Base: 3 studi di alta qualit\u00E0 e 25 di qualit\u00E0 moderata.",
+          "\u2192 RISULTATI: esercizio ed educazione via video superiori alle cure usuali per forza e funzione dell'arto inferiore; educazione all'autogestione via telesalute con guadagni a breve termine sul conteggio dei passi; realt\u00E0 virtuale aggiunta alla riabilitazione standard con possibile miglioramento della stabilit\u00E0.",
+          "\u2192 Pi\u00F9 comunemente, telriabilitazione e approcci in presenza danno esiti SIMILI. L'aggiunta di app o monitoraggio remoto alla riabilitazione standard produce miglioramenti a breve termine.",
+          "\u26A0\uFE0F Nonostante la crescita delle evidenze, le differenze su quali strumenti, come e quando usarli rendono difficile fornire raccomandazioni specifiche di implementazione.",
+          "\u2500\u2500\u2500 SETTING DI CURA \u2500\u2500\u2500",
+          "Quando possibile, la fisioterapia post-operatoria dopo TKA PU\u00D2 svolgersi in setting AMBULATORIALE piuttosto che in riabilitazione degenziale o a domicilio.",
+          "Qualit\u00E0 dell'evidenza: bassa. Forza: DEBOLE \u25C6\u25C6\u25C7\u25C7. Base: 5 studi di bassa qualit\u00E0.",
+          "\u2192 Un studio: chi andava direttamente in ambulatoriale aveva funzione migliore a 1 mese rispetto a chi faceva 2 settimane di domiciliare prima. A 2 anni la funzione era migliore in chi era dimesso direttamente in ambulatoriale rispetto a chi faceva riabilitazione degenziale.",
+          "\u26A0\uFE0F Le differenze erano statisticamente significative ma di scarsa rilevanza clinica. NESSUNA differenza tra setting per eventi avversi (necessit\u00E0 di manipolazione, TVP, embolia polmonare, infezione, revisione).",
+          "VANTAGGI DELL'AMBULATORIALE: minor rischio di infezione ospedaliera, maggiore interazione con la comunit\u00E0, probabile maggiore costo-efficacia.",
+          "\u26A0\uFE0F CAUTELA: il setting ambulatoriale potrebbe aumentare il rischio per pazienti non buoni candidati, in particolare con supporto sociale limitato. Considerazioni principali: eventi cardiopolmonari o tromboembolici, problemi della ferita, necessit\u00E0 di reintervento, cadute.",
+          "\u2500\u2500\u2500 LEGENDA GRADI (sistema AAOS/APTA) \u2500\u2500\u2500",
+          "\u25C6\u25C6\u25C6\u25C6 FORTE \u2014 obbligo: 'deve' o 'dovrebbe' | \u25C6\u25C6\u25C6\u25C7 MODERATA \u2014 obbligo: 'dovrebbe' | \u25C6\u25C6\u25C7\u25C7 DEBOLE \u2014 obbligo: 'pu\u00F2' | \u25C6\u25C7\u25C7\u25C7 CONSENSO \u2014 opinione del gruppo di lavoro",
+          "\u26A0\uFE0F Una raccomandazione pu\u00F2 essere DECLASSATA anche partendo da evidenza di alta qualit\u00E0, per eterogeneit\u00E0, effect size limitati o problemi di disegno: nelle voci sopra il motivo del declassamento \u00E8 sempre indicato."
+        ]
+      }
+    ]
+  },
+  {
+    id: 3,
+    category: "Spalla",
+    color: "#5C3A8C",
+    icon: "💪",
+    title: "Lesioni della Cuffia dei Rotatori",
+    source: "AAOS 2024 / SECEC",
+    tags: ["cuffia rotatori", "spalla", "tendine"],
+    summary: "Diagnosi e trattamento delle lesioni della cuffia dei rotatori, dal trattamento conservativo alla chirurgia artroscopica.",
+    sections: [
+      {
+        title: "Classificazione delle Lesioni",
+        content: [
+          "Lesioni parziali: artro-surface (<50% spessore), burso-surface (>50% spessore richiedono riparazione)",
+          "Lesioni complete piccole: < 1cm (alta possibilità di guarigione spontanea)",
+          "Lesioni complete medie: 1-3cm",
+          "Lesioni complete grandi: 3-5cm",
+          "Lesioni massive: > 5cm o coinvolgimento ≥2 tendini",
+        ],
+      },
+      {
+        title: "Trattamento Conservativo (1° linea)",
+        content: [
+          "FANS per 4-6 settimane + protezione dal carico",
+          "Fisioterapia: rinforzo muscoli periscapolari e rotatori",
+          "Infiltrazione corticosteroidea subacromiale (max 3/anno, non ripetere se inefficace)",
+          "PRP: dati insufficienti per raccomandazione routinaria",
+          "Rivalutare con RMN se peggioramento clinico dopo 3 mesi di terapia conservativa",
+        ],
+      },
+      {
+        title: "Indicazioni alla Chirurgia",
+        content: [
+          "Fallimento trattamento conservativo dopo 3-6 mesi",
+          "Lesione acuta post-traumatica in paziente giovane/attivo",
+          "Lesione degenerativa sintomatica in paziente < 65 anni con buona qualità tendinea",
+          "Progressione documentata della lesione alla RMN",
+          "Lesioni parziali > 50% con dolore persistente",
+        ],
+      },
+      {
+        title: "Follow-up Post-chirurgico",
+        content: [
+          "Tutore in abduzione per 4-6 settimane (lesioni medie-grandi)",
+          "Pendolazioni passive passive da settimana 1-2",
+          "Rinforzo attivo-assistito da settimana 6",
+          "Ritorno completo alle attività: 6-9 mesi (lesioni grandi)",
+          "RMN di controllo a 6 mesi per verifica della guarigione",
+        ],
+      },
+    ],
+  },
+  {
+    id: 15,
+    category: "Spalla",
+    color: "#5C3A8C",
+    icon: "💪",
+    title: "Tendinopatia della Cuffia dei Rotatori — CPG 2025",
+    source: "Desmeules et al. | JOSPT 2025;55(4):235-274 | doi:10.2519/jospt.2025.13182 | AOPT/APTA | MGH Large-to-Massive RC Tear Protocol",
+    pdfUrl: "https://www.orthopt.org/uploads/content_files/files/Rotator_Cuff_CPG.pdf",
+    pdfUrl2: "https://www.massgeneral.org/assets/mgh/pdf/orthopaedics/sports-medicine/physical-therapy/rehabilitation-protocol-for-rotator-cuff-tear-large-to-massive-tear.pdf",
+    tags: ["spalla", "cuffia rotatori", "tendinopatia", "SAPS", "impingement", "CPG", "esercizio", "RCT"],
+    summary: "Linea guida CPG 2025 evidence-based per diagnosi, cura medica non chirurgica e riabilitazione della tendinopatia della cuffia dei rotatori (RCT) negli adulti. Include gestione di RCT con o senza calcificazioni e lesioni parziali. 25 raccomandazioni basate su evidenza + 15 da consenso.",
+    sections: [
+      {
+        title: "Valutazione e Diagnosi",
+        content: [
+          "ANAMNESI COMPLETA (Grado F): età, genere, dominanza, carichi lavorativi, sport, farmaci, comorbidità, fattori psicosociali, meccanismo lesione, trattamenti precedenti, sintomi attuali e obiettivi del paziente",
+          "ESAME FISICO (Grado F): ispezione (deformità, atrofia, edema), ROM attivo/passivo, forza muscolare; screening rachide cervicale obbligatorio per escludere dolore riferito",
+          "RED FLAGS (Grado F): screening obbligatorio per infezione, neoplasia, patologie cardiovascolari o sistemiche",
+          "TEST SPECIALI (Grado B): Painful Arc Test — utile per confermare la diagnosi; Hawkins-Kennedy Test — utile per escluderla. Nessun singolo test sufficientemente accurato da solo",
+          "MISURE OBIETTIVE (Grado A): ROM con goniometro, inclinometro o app smartphone validata; NO ROM scapolare (inaffidabile); forza con dinamometro manuale (handheld dynamometer)",
+          "OUTCOME MEASURES (Grado A): SPADI (Shoulder Pain and Disability Index) o DASH — validati, affidabili, responsivi",
+          "IMAGING (Grado F): NON indicata di routine in fase iniziale; ecografia preferita se indicata dopo 12 settimane di mancato miglioramento; RMN non raccomandata di routine; discutere pro/contro con il paziente",
+          "RINVIO SPECIALISTICO (Grado F): pazienti con sintomi persistenti e gravi dopo 12 settimane → medico dello sport, fisiatra o ortopedico",
+        ],
+      },
+      {
+        title: "Terapia Farmacologica",
+        content: [
+          "PARACETAMOLO (Grado C): indicato per sollievo dolore a breve termine",
+          "FANS (Grado B): efficaci per gestione dolore a breve termine — non come prima linea, ma supportati da evidenza moderata",
+          "OPPIOIDI (Gradi F/C): NON come prima linea; possono essere considerati a breve termine in casi gravi dove altri trattamenti sono inefficaci o controindicati — richiede rivalutazione regolare del rischio",
+          "INFILTRAZIONI CORTICOSTEROIDI (Gradi B/C): possono ridurre il dolore a breve termine, ma NON come prima linea; guidate da ecografia se eseguite",
+          "LAVAGGIO CALCIFICAZIONI (barbotage) (Grado B): raccomandato per tendinopatia calcifica non responsiva ai trattamenti iniziali",
+          "PRP e ACIDO IALURONICO (Gradi D/F): evidenza conflittuale per PRP; possono essere considerati in casi selezionati — non di routine",
+        ],
+      },
+      {
+        title: "Riabilitazione — Interventi Attivi (Prima Linea)",
+        content: [
+          "ESERCIZIO TERAPEUTICO (Grado A — cardine): rinforzo progressivo + esercizi di controllo motorio; individualizzare in base alla tolleranza al dolore e agli obiettivi del paziente",
+          "EDUCAZIONE (Grado C): educare il paziente su natura della condizione, modificazione delle attività, pain neuroscience, prognosi e autogestione — adattare al livello di alfabetizzazione e al contesto psicosociale",
+          "TERAPIA MANUALE (Grado B): può ridurre il dolore a breve termine se associata all'esercizio; tecniche di soft tissue e mobilizzazioni/manipolazioni articolari",
+          "TAPING (Grado D): può essere usato come aggiunta per riduzione dolore a breve termine — evidenza conflittuale",
+          "AGOPUNTURA (Grado C): può offrire benefici aggiuntivi a breve termine se associata alla riabilitazione attiva",
+          "MODIFICHE ERGONOMICHE (Grado C): possono aiutare a ridurre il carico lavorativo sulla spalla",
+        ],
+      },
+      {
+        title: "Interventi Fisici e Strumentali",
+        content: [
+          "SHOCKWAVE (ESWT) (Grado C): utile nella tendinopatia calcifica; NON raccomandato nella RCT non calcifica",
+          "LASER TERAPIA (Grado C): può ridurre il dolore nella tendinopatia calcifica",
+          "ULTRASUONI TERAPEUTICI (Gradi C/B): NON raccomandati per RCT calcifica né non calcifica — assenza di beneficio dimostrato",
+          "IMMOBILIZZAZIONE STRETTA: NON raccomandata",
+          "MOBILIZZAZIONE PASSIVA come unico trattamento: NON raccomandata",
+          "NOVITÀ 2025 rispetto al 2022: integrazione SR fino a ottobre 2023; nuove raccomandazioni per ritorno allo sport; grading GRADE più chiaro; linguaggio patient-centered e shared decision-making",
+        ],
+      },
+      {
+        title: "Ritorno alla Funzione e allo Sport",
+        content: [
+          "CRITERI DI RITORNO (Grado F): basati sulla capacità dell'atleta di tollerare il carico sulla spalla e sulla cuffia — non su criteri temporali fissi",
+          "OUTCOME MEASURES (Grado F): usare strumenti validati per valutare dolore, disabilità, prontezza al ritorno e performance funzionale — test sport-specifici e checklist di ritorno allo sport",
+          "PROGRESSIONE DEL CARICO: dal lavoro isometrico indolore → concentrico/eccentrico → attività funzionale → sport-specifico",
+          "FATTORI PROGNOSTICI (Grado B): identificare fattori personali, clinici e lavorativi che influenzano la prognosi per guidare piani di cura individualizzati",
+          "Pazienti che non progrediscono adeguatamente devono essere indirizzati a uno specialista muscoloscheletrico",
+        ],
+      },
+      {
+        title: "Protocollo Post-Op Riparazione Cuffia Rotatori — Lesioni Grandi/Massive (MGH 2025)",
+        content: [
+          "FONTE: MGH Sports Medicine Physical Therapy — Rehabilitation Protocol for Rotator Cuff Repair: Large to Massive Tears (massgeneral.org). Protocollo a 6 fasi. ⚠️ Per lesioni piccole-medie, usare il protocollo Small-to-Medium Tear. Fattori che influenzano il decorso: dimensione della lesione, qualità del tessuto, numero di tendini coinvolti, età, BMI, diabete.",
+          "─── FASE I — IMMOBILIZZAZIONE (0-6 Settimane) ───",
+          "OBIETTIVI: proteggere la riparazione e promuovere la guarigione tendine-osso; controllo dolore e infiammazione; 6 settimane di immobilizzazione con tutore in abduzione 30-45° raccomandate per lesioni grandi",
+          "TUTORE: cuscino di abduzione 30-45°; indossare di notte durante il sonno",
+          "PRECAUZIONI FASE I: NO movimento attivo della spalla; NO carico sull'arto operato; NO ROM passivo o attivo della spalla; NO movimenti sopra la testa o dietro la schiena; NO spingere o tirare",
+          "INTERVENTI FASE I: AROM mano-polso-gomito (no ROM attivo gomito per 4 settimane se tenodesi del bicipite); esercizi di mobilità scapolare con tutore",
+          "CRITERI PROGRESSIONE: guarigione appropriata; aderenza alle precauzioni; dolore e infiammazione controllati",
+          "─── FASE II — PROM PASSIVO (6-10 Settimane) ───",
+          "OBIETTIVI: minimizzare la rigidità proteggendo la riparazione; iniziare PROM con il fisioterapista a 6 settimane; crioterapia e TENS per controllo del dolore",
+          "PRECAUZIONI FASE II: no AROM nonostante dolore minimo; evitare PROM aggressivo e doloroso; no rotazione interna (no mano dietro la schiena); no carico sull'arto",
+          "ESERCIZI FASE II — PROM (con FT): elevazione passiva supina 0-100°; rotazione esterna passiva seduto 0-30°; table slide (no shrug scapolare); pendolari (NO attivare i muscoli della spalla); RINFORZO: retrazione scapolare, elevazione, depressione scapolare (senza tutore)",
+          "CRITERI PROGRESSIONE: elevazione passiva ≥100-120°; rotazione esterna passiva ≥25-45° (braccio neutro); abduzione passiva ≥90°; dolore controllato; aderenza all'HEP",
+          "─── FASE III — AAROM e AROM (10-18 Settimane) ───",
+          "OBIETTIVI: avviare AAROM (10-14 sett) poi AROM (14-18 sett); isometria submassimale da 14-18 sett; normalizzare ROM e ADL",
+          "PRECAUZIONI FASE III: no sollevamento o attività dolorose; no appoggio del peso su mani/braccia; no movimenti bruschi o a scatto; no carico eccessivo sul tendine in guarigione",
+          "ESERCIZI FASE III — AAROM: elevazione supina con leva corta → cane AAROM flessione/abduzione/ER supina (10 sett) → beach chair 45° (11 sett) → posizione eretta (12 sett); assisted ER con braccio su cuscino; wall slide e wall walk (da 12 sett); AROM: ER in piedi (12 sett), sidelying ER (14 sett), forward reach attivo e elevazione (14 sett); ISOMETRIA SUBMASSIMALE: flessione, estensione, ER/IR con braccio al fianco (solo sforzo submassimale); rows in piedi → bent over rows",
+          "TERAPIA MANUALE (da sett. 10): mobilizzazioni grado 1-2, mobilizzazioni toraciche, massaggio dei tessuti molli per dolore e guarding muscolare",
+          "CRITERI PROGRESSIONE: elevazione passiva >140°; elevazione attiva >120° senza compensazioni; ER normale a 0° abduzione; posizionamento scapolare appropriato; ADL leggere sotto il livello della spalla senza dolore",
+          "─── FASE IV — RINFORZO INIZIALE (18-22 Settimane) ───",
+          "OBIETTIVI: progressione graduale resistenza; ROM completo; ripristino forza, potenza ed endurance; ritorno alle ADL e attività lavorative modificate",
+          "PRECAUZIONI FASE IV: no sollevamento >2.5 kg; no movimenti bruschi o a scatto; no abduzione a braccio teso (long lever) — troppo carico sul tendine; no posizione 'empty can' a nessuna fase (rischio impingement e stress sulla riparazione)",
+          "STRETCHING FASE IV: pec stretch (60°/90° nella porta); stretching rotazione interna con asciugamano; doorway ER stretch; crossbody stretch; sleeper stretch (non raccomandato per lanciatori)",
+          "RINFORZO FASE IV: prone W/Y/T/I; estensione spalla a braccio teso; protrazione scapolare supina; rows; ER/IR resistita, sidelying ER; forward punch con elastico; bicep curl, tricep extension; stabilizzazione ritmica in quadrupedia (perturbazione, ball on wall)",
+          "TERAPIA MANUALE FASE IV: mobilizzazioni grado 3-4 se indicato; tecniche devono essere indolori",
+          "CRITERI PROGRESSIONE: ROM completo con meccanica normale; nessun dolore con ADL e rinforzo",
+          "─── FASE V — RINFORZO AVANZATO (22-26 Settimane) ───",
+          "OBIETTIVI: ripristinare forza massimale, potenza ed endurance per attività ad alto livello; mantenere ROM indolore",
+          "PRECAUZIONI FASE V: no sollevamento >5 kg; no sollevamento overhead; no spinte o sollevamenti bruschi; no progressione in attività dolorose",
+          "INTERVENTI: stretching quotidiano; rinforzo 3 volte/sett con 5-10 min cardio warmup; progressione verso upper extremity strengthening generale",
+          "─── FASE VI — RITORNO ALLO SPORT (26-30 Settimane) ───",
+          "OBIETTIVI: mantenere ROM e stretching; forza spalla 85-90% del lato controlaterale (dinamometro handheld); forza massimale testabile da 10-12 mesi post-op; ritorno sicuro al lavoro, attività ricreative e sportive",
+          "PRECAUZIONI FASE VI: no sollevamenti forzati o pesanti; no movimenti bruschi; no progressione in attività dolorose",
+          "RINFORZO FASE VI — Cuffia: ER/IR isometrici, sidelying ER, standing ER/IR con elastico, abduzione progressiva; PERISCAPOLARE: prone T/Y/W, push-up plus, wall push-up, resistance band Ws, dynamic hug; PNF D1/D2 diagonal lifts; field goals; quadruped alternating isometrics",
+          "CRITERI DIMISSIONE: ROM completo e indolore senza meccanismi compensatori; forza spalla 4+/5; cinematica scapolotoracica normalizzata; ADL e rinforzo senza dolore; decisione ritorno allo sport individualizzata e discussa col chirurgo",
+        ],
+      },
+      {
+        title: "Continuum Riabilitativo Post-Op in 4 Fasi \u2014 Edwards et al. 2017 (Tabella 4)",
+        content: [
+          "FONTE: Edwards PK, Ebert JR, Littlewood C, Ackland T, Wang A. A systematic review of electromyography studies in normal shoulders to inform postoperative rehabilitation following rotator cuff repair. J Orthop Sports Phys Ther. 2017;47(12):931-944. doi:10.2519/jospt.2017.7271",
+          "IMPIANTO: gli esercizi sono raggruppati per livello di attivit\u00E0 EMG di sovraspinato e infraspinato, in fasi allineate alla guarigione tissutale e alla resistenza del sito di riparazione. Sono previsti DUE PERCORSI \u2014 precoce e ritardato \u2014 secondo l'impostazione di Thigpen et al., che adattano la velocit\u00E0 di progressione a et\u00E0 del paziente, dimensione della lesione, qualit\u00E0 del tessuto e integrit\u00E0 della riparazione.",
+          "\u26A0\uFE0F BIOLOGIA DELLA GUARIGIONE: le fibre che legano il tendine all'osso non sono presenti in numero apprezzabile tra la 6\u00AA e la 12\u00AA settimana. La resistenza della riparazione \u00E8 stimata al 19-30% del normale a 6 settimane e al 29-50% a 12 settimane; la quasi completa maturazione si raggiunge intorno alla 15\u00AA settimana, quando il sito pu\u00F2 tollerare carichi maggiori.",
+          "\u2500\u2500\u2500 FASE 1 \u2014 PROTEZIONE E MOVIMENTO PRECOCE (attivit\u00E0 EMG \u226415% MVIC) \u2500\u2500\u2500",
+          "TEMPISTICA: percorso precoce settimane 2-6 | percorso ritardato settimane 5-8.",
+          "ROM PASSIVO IN FLESSIONE: forward bow, flessione supina assistita dal terapista, flessione supina auto-assistita, flessione in decubito laterale, towel slide, washcloth press-up.",
+          "ROM PASSIVO IN ROTAZIONE (nessuna rotazione interna; rotazione esterna fino a 30\u00B0): rotazione esterna assistita al muro, rotazione esterna supina con bastone, rotazione esterna con bastone in posizione eretta.",
+          "\u2500\u2500\u2500 FASE 2 \u2014 DA ATTIVO-ASSISTITO AD ATTIVO (attivit\u00E0 EMG \u226420% MVIC) \u2500\u2500\u2500",
+          "TEMPISTICA: percorso precoce settimane 7-9 | percorso ritardato settimane 9-12.",
+          "ROM ATTIVO-ASSISTITO IN FLESSIONE: ball roll, flessione con bastone in posizione eretta, wall walk/slide supportato con progressione alla versione non supportata, flessione assistita con carrucola.",
+          "ROM ATTIVO IN FLESSIONE: press-up attivo supino, press-up attivo reclinato.",
+          "ROM ATTIVO-ASSISTITO IN ROTAZIONE: proseguire gli esercizi di rotazione esterna della fase precedente; iniziare rotazione interna auto-assistita e con bastone.",
+          "\u2500\u2500\u2500 FASE 3 \u2014 RINFORZO (attivit\u00E0 EMG 21-50% MVIC) \u2500\u2500\u2500",
+          "TEMPISTICA: percorso precoce settimana 10 | percorso ritardato settimana 13.",
+          "ROM ATTIVO IN FLESSIONE: progredire a press-up in piedi e flessione attiva (da leva corta a leva lunga), quindi flessione attiva resistita.",
+          "RINFORZO IN ROTAZIONE: progredire da seduto a in piedi (in leggera abduzione fino a 45\u00B0) e infine in decubito laterale, con o senza cuscino.",
+          "CATENA POSTERIORE: seated row, con progressione a standing row/pull e a forward e scapular punches.",
+          "\u2500\u2500\u2500 FASE 4 \u2014 RINFORZO TARDIVO (attivit\u00E0 EMG \u226550% MVIC) \u2500\u2500\u2500",
+          "TEMPISTICA: settimana 20 per entrambi i percorsi.",
+          "ESERCIZI: flessione e abduzione attive; abduzione orizzontale prona a 90\u00B0 e 100\u00B0; rinforzo in rotazione dalla rotazione esterna in piedi a 90\u00B0 di abduzione alla rotazione esterna prona a 90\u00B0 di abduzione; push-up e push-up plus, dynamic hug.",
+          "\u2500\u2500\u2500 PRINCIPI DI PROGRESSIONE \u2500\u2500\u2500",
+          "LEVA: procedere da attivit\u00E0 a braccio corto verso attivit\u00E0 a braccio lungo.",
+          "POSTURA E GRAVIT\u00C0: iniziare da supino, passare all'inclinato e infine alla posizione eretta, modulando cos\u00EC l'effetto della gravit\u00E0 e il carico sulla gleno-omerale.",
+          "ROTAZIONE ESTERNA ATTIVA: progredire da seduto a in piedi, poi decubito laterale, poi prono a 90\u00B0 di abduzione, infine in piedi a 90\u00B0 di abduzione.",
+          "\u26A0\uFE0F ROTAZIONE ESTERNA PASSIVA: in fase acuta conviene restare sotto i 30\u00B0. Uno studio su cadavere ha rilevato che la rotazione esterna aumenta la tensione nella regione anteriore del tendine sovraspinato e rilassa quella posteriore, favorendo la formazione di gap anteriore, con picco di strain proprio a 30\u00B0. Un altro studio suggerisce che fino a 60\u00B0, con braccio elevato a 30\u00B0 nel piano scapolare o coronale, possa essere eseguita senza tensione eccessiva.",
+          "\u26A0\uFE0F ROTAZIONE INTERNA: quella passiva genera attivazione bassa, ma insieme a quella attiva \u00E8 stata indicata come fonte di tensione eccessiva sulla riparazione, e va evitata nelle fasi precoci.",
+          "\u26A0\uFE0F LESIONI GRANDI E MASSIVE: negli studi che avviano il movimento precocemente il rischio di fallimento strutturale risulta quasi doppio. In questi casi la progressione e l'introduzione del carico devono essere conservative."
+        ]
+      },
+      {
+        title: "Attivit\u00E0 EMG per Esercizio \u2014 %MVIC per Muscolo (Edwards et al. 2017)",
+        content: [
+          "METODO: 2159 studi individuati, 20 di buona qualit\u00E0 inclusi, 43 esercizi valutati tra ROM passivo, attivo-assistito e rinforzo. Valori riportati come medie aggregate, con il range tra studi dove disponibile. Esclusi gli studi con et\u00E0 media o limite superiore oltre i 50 anni, perch\u00E9 le lesioni asintomatiche di cuffia aumentano con l'et\u00E0.",
+          "SOGLIE: bassa 0-15% MVIC | bassa-moderata 16-20% | moderata 21-40% | alta 41-60% | molto alta oltre 60%. La soglia del 15% deriva dallo studio biomeccanico di Long et al., che ha indicato attivazioni superiori come potenzialmente eccessive per una cuffia appena riparata.",
+          "\u2500\u2500\u2500 SOVRASPINATO \u2014 ATTIVIT\u00C0 BASSA (\u226415% MVIC): 20 esercizi \u2500\u2500\u2500",
+          "ER supina con bastone 3 | ER eretta con bastone 3 | Washcloth press-up mani vicine 3 | Washcloth press-up mani distanti 4 | Press-up supino 4 | ER assistita al muro 4 | Protrazione scapolare su palla 5 | Forward bow 5 | Elevazione supina assistita dal terapista 5 | Estensione prona a 0\u00B0 abd 6 | Elevazione in decubito laterale 7 | IR in piedi a 0\u00B0 abd 7 (7-10) | Incline press-up 8 | Towel slide sagittale 8 (4-12) | IR eretta assistita 9 | Elevazione supina auto-assistita 11 (1-17) | Pendolo 11 | Towel slide mediale 12 | Towel slide scapolare 13 (7-13) | Wall slide verticale supportato 13",
+          "\u2500\u2500\u2500 SOVRASPINATO \u2014 ATTIVIT\u00C0 BASSA-MODERATA E MODERATA (16-40%) \u2500\u2500\u2500",
+          "Ball roll 16 | Elevazione eretta con bastone 16 (11-19) | Wall slide verticale non supportato 17 | Elevazione con carrucola 17 (3-19) | Wall slide diagonale supportato 18 | Flessione attiva a gomito flesso 20 | Wall walk/slide 22 (21-22) | Wall slide diagonale non supportato 22 | Estensione resistita in piedi 24 | ER supina assistita 27 | Press-up in piedi 29 | Flessione/elevazione attiva a gomito esteso 29 | ER in piedi nel piano scapolare 32 | IR nel piano scapolare 33 | Seated row/pull 33 | ER in piedi 0\u00B0 abd senza asciugamano 35 (20-41) | Flessione/elevazione resistita in piedi 35 | Flessione prona a 180\u00B0 abd 38",
+          "\u2500\u2500\u2500 SOVRASPINATO \u2014 ATTIVIT\u00C0 ALTA E MOLTO ALTA (oltre 40%) \u2500\u2500\u2500",
+          "IR in piedi a 90\u00B0 abd 41 | ER in piedi 0\u00B0 abd con asciugamano 41 | High row 42 | Low row 46 | Standing row/pull 46 | Forward punch 46 | ER in decubito laterale 51 | ER in piedi a 90\u00B0 abd 54 (39-57) | Diagonale 54 | Dynamic hug 62 | Full-can abduzione 73 (62-90) | ER prona a 90\u00B0 74 (68-91) | Empty-can abduzione 75 (63-92) | Abduzione orizzontale prona 90\u00B0 77 (67-88) | Abduzione orizzontale prona 100\u00B0 82 | Push-up plus 99",
+          "\u2500\u2500\u2500 INFRASPINATO \u2014 ATTIVIT\u00C0 BASSA (\u226415% MVIC): 25 esercizi \u2500\u2500\u2500",
+          "Forward bow 2 | Towel slide sagittale 4 (1-8) | Protrazione scapolare su palla 4 | Elevazione supina assistita dal terapista 5 | Elevazione supina auto-assistita 6 (4-8) | Estensione prona a 0\u00B0 abd 6 | Washcloth press-up mani vicine 7 | Towel slide mediale 7 | Towel slide scapolare 7 (4-9) | ER eretta con bastone 9 | Pendolo 9 | ER supina assistita 9 | Press-up supino 9 | Incline press-up 9 | Wall slide verticale supportato 9 | Wall slide verticale non supportato 10 | Wall slide diagonale supportato 10 | Elevazione in decubito laterale 10 | Elevazione con carrucola 11 (3-20) | Washcloth press-up mani distanti 11 | ER supina con bastone 12 | ER seduta a 0\u00B0 abd 13 | Press-up in piedi 14 | Wall slide diagonale non supportato 15 | Wall walk/slide 15 (9-19)",
+          "\u2500\u2500\u2500 INFRASPINATO \u2014 ATTIVIT\u00C0 BASSA-MODERATA E MODERATA (16-40%) \u2500\u2500\u2500",
+          "Elevazione eretta con bastone 16 (11-27) | ER seduta a 90\u00B0 abd 17 | Ball roll 18 | ER assistita al muro 18 | IR in piedi 0\u00B0 abd 20 (3-32) | IR auto-assistita 22 | IR in piedi 90\u00B0 abd 24 | Flessione/elevazione attiva 26 (21-29) | Low row 29 | High row 31 | Flessione attiva a gomito flesso 35 | ER in piedi 0\u00B0 abd con asciugamano 39 (39-50) | ER in piedi a 45\u00B0 abd 39",
+          "\u2500\u2500\u2500 INFRASPINATO \u2014 ATTIVIT\u00C0 ALTA E MOLTO ALTA (oltre 40%) \u2500\u2500\u2500",
+          "Estensione resistita in piedi 41 | ER decubito laterale con asciugamano 42 | Forward punch 42 (28-50) | ER decubito laterale senza asciugamano 45 (18-62) | Flessione prona a 180\u00B0 abd 45 | Push-up 49 | ER in piedi 0\u00B0 abd senza asciugamano 50 (40-77) | ER in piedi a 90\u00B0 abd 50 (50-51) | Standing row/pull 51 (28-60) | ER prona a 90\u00B0 54 (30-135) | Flessione resistita in piedi 55 | Abduzione orizzontale prona 90\u00B0 64 (39-122) | Empty-can abduzione 75 | Full-can abduzione 82 | Push-up plus 104 | Pendant ER 125",
+          "\u2500\u2500\u2500 SOTTOSCAPOLARE (valutato in soli 6 studi) \u2500\u2500\u2500",
+          "Entro la soglia del 15%: Elevazione con carrucola 8 | Table slide 10 | Flessione prona 12 | Seated row 14 | ER assistita al muro 15",
+          "Oltre la soglia: Elevazione eretta con bastone 24 | ER eretta con bastone 27 | Forward punch 35 (8-69) | IR a 0\u00B0 abd 40 (13-74) | IR a 45\u00B0 abd 53 | ER a 0\u00B0 abd 57 | ER a 90\u00B0 abd 57 | Dynamic hug 58 | Diagonale 60 | IR a 90\u00B0 abd 65 | Low row 69 | High row 74 | Standing row 81 | Estensione resistita 97 | Elevazione/flessione attiva resistita 99",
+          "\u26A0\uFE0F PUSH-UP PLUS: attivazione molto alta nella porzione superiore del sottoscapolare (121% MVIC) e alta in quella inferiore (46%). Porzione superiore e inferiore hanno funzioni distinte e possono richiedere esercizi differenti, soprattutto se riparate.",
+          "\u2500\u2500\u2500 PICCOLO ROTONDO (15 esercizi, tutti di rinforzo) \u2500\u2500\u2500",
+          "ER in piedi 0\u00B0 con asciugamano 29 (17-46) | ER in piedi piano scapolare 39 (31-55) | Abduzione orizzontale prona 100\u00B0 41 (39-44) | ER prona a 90\u00B0 45 (43-48) | ER in piedi 0\u00B0 senza asciugamano 46 (17-84) | Abduzione orizzontale prona 90\u00B0 47 | ER decubito laterale 56 (33-80) | IR a 90\u00B0 abd 63 | ER in piedi a 90\u00B0 69 (39-89) | Forward punch 69 | IR a 0\u00B0 abd 93 | Middle row 98 | Low row 101 | High row 109 | Flessione resistita 112",
+          "\u2500\u2500\u2500 OSSERVAZIONI CLINICHE \u2500\u2500\u2500",
+          "ROTAZIONE ESTERNA PASSIVA AL MURO: attiva il sovraspinato meno della rotazione esterna supina eseguita con bastone o dal terapista. Attenzione per\u00F2: nei tre esercizi di ER passiva supina l'attivit\u00E0 risulta bassa sul sovraspinato ma pi\u00F9 elevata sull'infraspinato e ancor pi\u00F9 sul sottoscapolare, quindi vanno usati con cautela nelle lesioni che coinvolgono questi due muscoli.",
+          "PENDOLO: attivit\u00E0 bassa su sovraspinato e infraspinato, quindi appropriato in fase precoce. Ma i pendoli eseguiti male, specie quelli ampi, generano pi\u00F9 attivit\u00E0 di quelli piccoli e corretti, e nelle spalle patologiche l'attivazione risulta ancora maggiore. Trattandosi tipicamente di esercizio domiciliare non supervisionato, altri esercizi possono risultare pi\u00F9 adatti in assenza di controllo diretto.",
+          "PRESS-UP SUPINO E INCLINATO: restano sotto il 15% MVIC per il sovraspinato e permettono una progressione graduale prima del press-up in piedi, che genera invece attivit\u00E0 moderata.",
+          "ESERCIZI CHE SCARICANO LA SPALLA: table slide, ball roll e wall slide verticale supportato producono attivit\u00E0 bassa o bassa-moderata sia sul sovraspinato sia sull'infraspinato, e servono come ponte verso press-up, flessione ed elevazione attivi.",
+          "BASTONE E CARRUCOLA: gli esercizi attivo-assistiti che usano bastone o carrucola per elevare l'arto operato tendono a superare il 15% MVIC, il che rende discutibile il loro impiego molto precoce.",
+          "ROTAZIONE ESTERNA ATTIVA: l'attivit\u00E0 va da moderata ad alta nel sovraspinato (31-69% MVIC), nell'infraspinato (13-50%) e nel piccolo rotondo (29-69%). Va progredita dalla posizione seduta a quella eretta, poi decubito laterale, prono a 90\u00B0 di abduzione e infine in piedi a 90\u00B0 di abduzione omerale.",
+          "\u2500\u2500\u2500 LIMITI \u2500\u2500\u2500",
+          "I dati derivano da soggetti sani sotto i 40 anni: chi ha una spalla dolorosa o operata attiva la muscolatura diversamente e fatica a restare passivo. In uno studio di confronto, i pazienti con patologia di spalla rilassavano sovraspinato e trapezio superiore con maggiore difficolt\u00E0 rispetto ai controlli sani.",
+          "Pochi studi hanno valutato sottoscapolare e piccolo rotondo: serve cautela particolare nell'applicare queste indicazioni alle riparazioni che li coinvolgono.",
+          "Non esiste una relazione diretta dimostrata tra attivit\u00E0 EMG dinamica e tensione nelle strutture muscolo-tendinee: le correlazioni sono solo moderate. Piano di movimento, carico ciclico, peso e lunghezza dell'arto influenzano anch'essi la tensione sulla riparazione.",
+          "CONCLUSIONE DEGLI AUTORI: questi risultati vanno usati come guida pragmatica alla selezione degli esercizi lungo il percorso post-operatorio, non come confine assoluto tra sicuro e non sicuro. \u00C8 essenziale considerare le caratteristiche individuali e i fattori di rischio che possono compromettere la guarigione tendinea e aumentare il rischio di ri-rottura."
+        ]
+      },
+    ],
+  },
+  {
+    id: 16,
+    category: "Spalla",
+    color: "#5C3A8C",
+    icon: "🦴",
+    title: "Sindrome da Dolore Subacromiale (SAPS) — Linea Guida Olandese",
+    source: "Diercks et al. | Acta Orthop 2014;85(3):314-322 | PMC4062801 | Dutch Orthopaedic Association | AAOS/ASES Conditioning Program",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC4062801/pdf/ORT-85-314.pdf",
+    pdfUrl2: "https://www.orthoinfo.org/recovery/rotator-cuff-and-shoulder-conditioning-program/",
+    tags: ["spalla", "SAPS", "impingement subacromiale", "tendinopatia", "calcificazioni", "esercizio eccentrico", "chirurgia"],
+    summary: "Linea guida multidisciplinare olandese per la diagnosi e il trattamento della Sindrome da Dolore Subacromiale (SAPS — Subacromial Pain Syndrome). Supera il concetto di 'impingement' con un modello multifattoriale basato sulla degenerazione tendinea. Include algoritmi diagnostici, test clinici, imaging, trattamento conservativo e indicazioni chirurgiche.",
+    sections: [
+      {
+        title: "Definizione e Diagnosi Clinica",
+        content: [
+          "SAPS: dolore non traumatico, solitamente monolaterale, localizzato intorno all'acromion, spesso aggravato durante o dopo elevazione del braccio; include borsiti, tendinosi calcarea, tendinopatia sovraspinato, lesioni parziali cuffia, tendinite bicipite e degenerazione tendinea",
+          "Il termine 'SAPS' è preferibile a 'impingement syndrome' — il meccanismo puramente anatomico da acromion è insufficiente a spiegare la patologia; centrale è la degenerazione tendinea",
+          "DIAGNOSI: combinazione di test clinici obbligatoria — nessun singolo test sufficientemente accurato",
+          "BATTERIA DIAGNOSTICA RACCOMANDATA: Hawkins-Kennedy test + Painful Arc test + test di forza dell'infraspinato — combinazione aumenta la probabilità post-test di SAPS",
+          "PER ROTTURA CUFFIA: drop-arm test + test di forza infraspinato e sovraspinato",
+          "FATTORI PROGNOSTICI NEGATIVI (Livello 1): durata sintomi >3 mesi, età 45-54 anni, fattori psicosociali (per cronico >3 mesi)",
+          "OUTCOME MEASURES: Shoulder Disability Questionnaire (SDQ-NL), DASH, Simple Shoulder Test, Shoulder Rating Questionnaire",
+        ],
+      },
+      {
+        title: "Imaging",
+        content: [
+          "IMAGING: non indicata di routine nelle prime 6 settimane; indicata dopo 6 settimane di sintomi persistenti",
+          "ECOGRAFIA (prima scelta): sensibilità e specificità paragonabili a RMN per lesioni full-thickness; indicata per tendinosi, borsite, rottura tendine bicipite, calcificazioni — richiede tecnica standardizzata e trasduttori 7.5-20 MHz",
+          "RMN: indicata quando ecografia non disponibile o inconclusiva; obbligatoria se si valuta riparazione chirurgica (dimensioni, retrazione, infiltrazione adiposa muscoli)",
+          "RMN ARTROGRA: considerare per sospette lesioni parziali (PASTA) o intra-articolari — alta sensibilità/specificità; protocollo ABER (abduzione-rotazione esterna) raccomandato",
+          "RADIOGRAFIA convenzionale: complementare all'ecografia per escludere osteoartrite, anomalie ossee, calcificazioni",
+          "La morfologia acromiale (tipo III) non è significativamente associata a lesioni della cuffia nei pazienti >50 anni",
+        ],
+      },
+      {
+        title: "Trattamento Conservativo",
+        content: [
+          "ALGORITMO: riposo relativo in fase acuta → FANS per max 2 settimane → espansione graduale delle attività → esercizio terapeutico",
+          "ESERCIZIO (Livelli 1-2): più efficace del non trattamento; esercizi specifici su cuffia e stabilizzatori scapolari superiori all'esercizio generico; esercizio domiciliare equivalente alla fisioterapia supervisionata",
+          "ESERCIZIO: bassa intensità, alta frequenza, entro soglia del dolore; combinare training eccentrico, stabilizzazione scapolare, rilassamento e postura corretta",
+          "TRATTAMENTO TRIGGER POINT MIOFASCIALI (incluso stretching): può supportare l'esercizio terapeutico (Livello 2)",
+          "MASSAGGIO (soft tissue): più efficace del placebo per riduzione dolore e funzione (Livello 2)",
+          "INFILTRAZIONI CORTICOSTEROIDI: efficaci nelle prime 8 settimane vs placebo, fisioterapia o non trattamento; non raccomandati come unica terapia a lungo termine; guidate da ecografia se possibile",
+          "FANS orali: più efficaci del placebo nelle prime 1-2 settimane (Livello 3)",
+          "LASER (Livello 3): più efficace del placebo e degli ultrasuoni per riduzione dolore a 2-4 settimane",
+          "NON RACCOMANDATI: ultrasuoni terapeutici (non superiori al placebo); elettrostimolazione (non superiore al placebo); acupuntura (non superiore a placebo ed esercizio)",
+          "ESWT ad alta energia (Livello 1): più efficace di ESWT a bassa energia o placebo SOLO per tendinosi calcarea; NON indicato in SAPS senza calcificazioni o in fase acuta",
+          "NON RACCOMANDATI: immobilizzazione stretta; mobilizzazione passiva senza movimento attivo",
+        ],
+      },
+      {
+        title: "Trattamento Chirurgico e Calcificazioni",
+        content: [
+          "CHIRURGIA (Livello 2): nessuna evidenza convincente che la chirurgia sia superiore al trattamento conservativo per SAPS con cuffia integra",
+          "INDICAZIONE: solo dopo esaurimento del trattamento conservativo; bursectomia ± acromioplastica (nessuna differenza clinica tra le due); approccio artroscopico vs aperto — stesso outcome finale, ma artroscopico riduce degenza e accelera il ritorno al lavoro",
+          "RIPARAZIONE CUFFIA: indicazioni dipendono da dimensione della lesione, qualità muscolare, età e livello di attività del paziente; no differenza clinica tra singola e doppia fila per outcome finale; doppia fila riduce re-rotture nelle lesioni >1 cm",
+          "BICIPITE: tenotomia vs tenodesi — stesso outcome clinico; tenotomia lascia più difetto estetico, tenodesi causa più dolore residuo",
+          "TENDINOSI CALCAREA: ESWT, barbotage (needling ecoguidato) o rimozione chirurgica — nessuna preferenza chiara; chirurgia non raccomandata di prima linea",
+          "CUFFIA ASINTOMATICA: nessuna indicazione chirurgica per lesioni asintomatiche della cuffia",
+          "RIABILITAZIONE in centro specializzato: considerare per SAPS cronico e resistente al trattamento, con componente di comportamento pain-perpetuating",
+        ],
+      },
+      {
+        title: "Prevenzione e Fattori di Rischio Occupazionali",
+        content: [
+          "FATTORI DI RISCHIO LAVORATIVI (Livello 1): movimenti ripetitivi spalla/mano-polso, lavoro con forza prolungata arti superiori, vibrazioni mano-braccio, postura non ergonomica, alto carico psicosociale",
+          "PREVENZIONE (Grado B): attività sportiva regolare (>3h/sett per almeno 10 mesi/anno) ha effetto protettivo su dolore cervico-scapolare e assenteismo",
+          "APPROCCIO BIOPSICOSOCIALE: intervento precoce con focus sul ritorno al lavoro ha le migliori probabilità di successo",
+          "INTERVENTO OCCUPAZIONALE: indicato se sintomi persistono >6 settimane — modificare compiti ripetitivi, ridurre forza sostenuta, correggere postura lavorativa",
+          "PROGNOSI: durata sintomi >3 mesi = fattore prognostico negativo indipendente dalla terapia scelta; dopo 1 anno, 1/3 dei pazienti ancora con dolore e/o limitazione",
+        ],
+      },
+      {
+        title: "Programma di Condizionamento Spalla/Cuffia (AAOS / OrthoInfo — ASES)",
+        content: [
+          "FONTE: OrthoInfo AAOS — Rotator Cuff and Shoulder Conditioning Program (orthoinfo.org), revisionato da American Shoulder and Elbow Surgeons (ASES). Durata: 4-6 settimane; mantenimento: 2-3 volte/sett a lungo termine.",
+          "MUSCOLI TARGET: deltoid (anteriore/posteriore/laterale), trapezio (superiore/medio), romboidi, teres minor, sovraspinato, infraspinato, sottoscapolare, bicipite, tricipite.",
+          "WARM-UP: 5-10 min attività a basso impatto (camminata o cyclette) prima di ogni sessione; stretching prima e dopo il rinforzo; no dolore durante gli esercizi.",
+          "─── STRETCHING (5-6 giorni/sett) ───",
+          "1. PENDOLO: appoggio su tavolo, braccio libero che oscilla avanti/indietro, lateralmente e in cerchio — 2 serie x 10 rip — target: deltoid, sovraspinato, infraspinato, sottoscapolare",
+          "2. CROSSOVER ARM STRETCH: tirare il braccio attraverso il petto tenendo il braccio superiore, hold 30 sec — 4 rip per lato — target: deltoid posteriore",
+          "3. ROTAZIONE INTERNA PASSIVA (con stick): stick dietro la schiena, tirare orizzontalmente fino a sentire la tensione senza dolore, hold 30 sec — 4 rip per lato — target: sovraspinato (anteriore spalla)",
+          "4. ROTAZIONE ESTERNA PASSIVA (con stick): stick tenuto davanti, spingere orizzontalmente, gomito contro il fianco, hold 30 sec — 4 rip per lato — target: infraspinato, teres minor (posteriore spalla)",
+          "5. SLEEPER STRETCH: decubito sul fianco, braccio affetto sotto, gomito flesso; usare il braccio sano per spingere il polso verso il basso fino a sentire tensione posteriore, hold 30 sec — 4 rip x 3 volte/die, quotidianamente — target: infraspinato, teres minor",
+          "─── RINFORZO CON ELASTICO (3 giorni/sett) ───",
+          "6. STANDING ROW: elastico a maniglia fissa, gomito piegato al fianco, tirare il gomito indietro stringendo le scapole — 3 serie x 8 rip (progressione a 3x12) — target: trapezio medio/inferiore",
+          "7. ROTAZIONE ESTERNA CON BRACCIO ABDOTTO 90°: elastico, gomito a 90° e all'altezza spalla, alzare la mano fino all'allineamento con la testa — 3 serie x 8 rip — target: infraspinato, teres minor",
+          "8. ROTAZIONE INTERNA (IN PIEDI): elastico, gomito al fianco, portare il braccio attraverso il corpo — 3 serie x 8 rip — target: pettorale, sottoscapolare",
+          "9. ROTAZIONE ESTERNA (IN PIEDI): elastico, gomito al fianco, ruotare esternamente — 3 serie x 8 rip — target: infraspinato, teres minor, deltoid posteriore",
+          "─── RINFORZO CON PESI (3 giorni/sett, salvo dove indicato) ───",
+          "10. ELBOW FLEXION (curl bicipite): braccio al fianco, sollevare il peso verso la spalla, hold 2 sec — 3 serie x 8 rip (max 5-7 kg) — target: bicipite",
+          "11. ELBOW EXTENSION (tricipite overhead): gomito flesso con peso dietro la testa, supportare il braccio col lato opposto, distendere il gomito — 3 serie x 8 rip (max 5 kg) — target: tricipite",
+          "12. TRAPEZIUS STRENGTHENING (prone thumb-up raise): in appoggio su panca, alzare il braccio con pollice verso l'alto fino all'altezza della spalla — 3-4 serie x 20 rip (max 3 kg) — 3-5 gg/sett — target: deltoid medio/posteriore, sovraspinato, trapezio medio",
+          "─── RINFORZO SCAPOLARE (3 giorni/sett) ───",
+          "13. SCAPULA SETTING: prono, braccia ai fianchi, avvicinare le scapole verso il basso, hold 10 sec — 10 rip — target: trapezio medio, serrato anteriore",
+          "14. SCAPULAR RETRACTION/PROTRACTION (prono con peso): braccio penzolante dal lato del lettino, sollevare stringendo la scapola verso il lato opposto — 2 serie x 10 rip (max 2.5 kg) — target: trapezio medio, serrato",
+          "15. BENT-OVER HORIZONTAL ABDUCTION: prono, braccio penzolante, alzare dritto fino all'altezza degli occhi — 3 serie x 8 rip (max 2.5 kg) — target: trapezio medio/inferiore, infraspinato, teres minor, deltoid posteriore",
+          "─── RINFORZO IN DECUBITO (3-5 giorni/sett) ───",
+          "16. IR/ER SUPINO: supino, braccio esteso dal fianco, gomito a 90° con dita verso l'alto; oscillare il braccio in arco completo IR→ER — 3-4 serie x 20 rip (max 5 kg) — target: muscoli anteriori e posteriori spalla",
+          "17. ROTAZIONE ESTERNA LATERALE: decubito sul lato sano, gomito a 90° contro il fianco, alzare il peso verticalmente — 2 serie x 10 rip (max 5 kg) — target: infraspinato, teres minor, deltoid posteriore",
+          "18. ROTAZIONE INTERNA LATERALE: decubito sul lato affetto, gomito a 90° contro il fianco, alzare il peso verticalmente — 2 serie x 10 rip (max 5 kg) — target: sottoscapolare, teres major",
+        ],
+      },
+    ],
+  },
+  {
+    id: 4,
+    category: "Rachide",
+    color: "#8B3A3A",
+    icon: "🔗",
+    title: "Lombalgia Acuta e Cronica",
+    source: "NICE 2016 agg. 2023 / LG ISS",
+    tags: ["rachide", "lombalgia", "dolore"],
+    summary: "Approccio evidence-based alla lombalgia aspecifica, dalla fase acuta alla cronicizzazione.",
+    sections: [
+      {
+        title: "Red Flags (Escludere Patologia Grave)",
+        content: [
+          "Traumi ad alta energia, specialmente in anziani o osteoporotici",
+          "Febbre, perdita di peso inspiegabile, storia di neoplasia",
+          "Sindrome della cauda equina: ritenzione urinaria, incontinenza sfinterica, anestesia perineale",
+          "Deficit neurologici progressivi agli arti inferiori",
+          "Dolore notturno severo a riposo non responsivo ad analgesici",
+          "Uso di immunosoppressori o steroidi a lungo termine",
+        ],
+      },
+      {
+        title: "Lombalgia Acuta (< 6 settimane)",
+        content: [
+          "Continuare le attività quotidiane nei limiti del dolore (evitare riposo a letto)",
+          "FANS per 7-14 giorni (prima linea): ibuprofene 400-600mg x3/die o diclofenac 75mg x2/die",
+          "Miorilassanti (ciclobenzaprina, tizanidina) per spasmo muscolare acuto (max 2 settimane)",
+          "NON prescrivere imaging routinario nei primi 6 settimane in assenza di red flags",
+          "Rivalutazione a 4-6 settimane se non miglioramento",
+        ],
+      },
+      {
+        title: "Lombalgia Cronica (> 12 settimane)",
+        content: [
+          "Terapia cognitivo-comportamentale: efficace quanto FANS nella lombalgia cronica",
+          "Programma di esercizio fisico supervisionato (aerobico + rinforzo core)",
+          "FANS a basso dosaggio come supporto al programma riabilitativo",
+          "Duloxetina 60mg/die: indicata in caso di componente neuropatica o depressione associata",
+          "NON raccomandati: oppioidi come terapia cronica di prima linea, TENS, agopuntura",
+          "Consulenza multidisciplinare del dolore se risposta assente a 6 mesi",
+        ],
+      },
+      {
+        title: "Indicazioni all'Imaging",
+        content: [
+          "RX lombare: in presenza di red flags o trauma",
+          "RMN rachide: sospetta compressione midollare/radicolare, red flags neurologiche",
+          "TC rachide: planning pre-chirurgico, valutazione stabilità ossea post-frattura",
+          "NON indicata RMN routinaria per lombalgia aspecifica senza red flags",
+        ],
+      },
+    ],
+  },
+  {
+    id: 5,
+    category: "Traumatologia",
+    color: "#7A6010",
+    icon: "🩹",
+    title: "Fratture del Radio Distale",
+    source: "AAOS 2020 / FESSH | University Hospitals Sussex NHS — Virtual Hand Fracture Clinic 2021",
+    pdfUrl: "https://www.uhsussex.nhs.uk/wp-content/uploads/2022/09/Distal-radius-fractures-virtual-hand-fracture-clinic.pdf",
+    tags: ["frattura", "polso", "traumatologia"],
+    summary: "Gestione delle fratture del radio distale nelle diverse categorie di pazienti.",
+    sections: [
+      {
+        title: "Classificazione AO/OTA",
+        content: [
+          "Tipo A (extra-articolari): A1 ulna, A2 radio semplice, A3 radio comminuta",
+          "Tipo B (articolari parziali): B1 sagittale, B2 dorsale (Barton), B3 volare (Barton inverso)",
+          "Tipo C (articolari complete): C1 semplice, C2 metafisi comminuta, C3 comminuta",
+          "Colles' fracture: extra-articolare con angolazione dorsale (più comune nell'anziano)",
+          "Smith's fracture: extra-articolare con angolazione volare",
+        ],
+      },
+      {
+        title: "Criteri per Trattamento Chirurgico",
+        content: [
+          "Angolazione dorsale > 20° post-riduzione",
+          "Accorciamento radiale > 3mm",
+          "Incongruenza articolare > 2mm (step-off)",
+          "Fratture instabili che non mantengono la riduzione nel gesso",
+          "Paziente giovane/attivo con qualsiasi frattura spostata",
+        ],
+      },
+      {
+        title: "Trattamento Conservativo",
+        content: [
+          "Riduzione chiusa in anestesia locale (ematoma block) o sedazione",
+          "Immobilizzazione in apparecchio gessato brachiopalmare per 5-6 settimane",
+          "Controllo RX a 1 settimana per verifica mantenimento della riduzione",
+          "Mobilizzazione delle dita e della spalla immediata",
+          "Rimozione gesso e FKT intensiva dopo 6 settimane",
+        ],
+      },
+      {
+        title: "ORIF con Placca Volare",
+        content: [
+          "Gold standard chirurgico per fratture instabili e articolari",
+          "Via di accesso volare (Henry) con placca ad angolo fisso",
+          "Mobilizzazione precoce del polso da 2-4 settimane post-op",
+          "Rimozione placca: non routinaria, solo se sintomatica",
+          "Complicanze: irritazione tendini flessori, sindrome del tunnel carpale, CRPS",
+        ],
+      },
+      {
+        title: "Protocollo Riabilitativo Frattura Radio Distale (NHS Sussex / Virtual Hand Fracture Clinic)",
+        content: [
+          "FONTE: University Hospitals Sussex NHS Foundation Trust — Distal Radius Fractures: Virtual Hand Fracture Clinic Patient Information (2021). Link PDF disponibile.",
+          "─── TEMPISTICHE DI RECUPERO ───",
+          "0-6 SETTIMANE: focus su ripristino del movimento e funzione leggera; svezzamento graduale dal tutore Futura; obiettivo: abbandonare il tutore entro 6 settimane dall'infortunio; iniziare ESERCIZI PASSIVI se trattati chirurgicamente",
+          "6 SETTIMANE: iniziare esercizi passivi se trattati con gesso; avviare weight-bearing; aumentare la destrezza del polso",
+          "8 SETTIMANE: aumentare gradualmente i carichi; iniziare gli esercizi di rinforzo",
+          "12 SETTIMANE: nessuna restrizione di attività; l'osso è sufficientemente solido per sport da contatto e pesi — i tessuti molli sono ancora in guarigione",
+          "12 SETTIMANE+: normale avere gonfiore lieve residuo, rigidità mattutina e dolori occasionali con attività nuove/pesanti",
+          "1 ANNO: recupero completo del polso; il dolore residuo lieve può persistere",
+          "GUIDA: consentita quando si ha pieno controllo del veicolo e si possono eseguire tutte le manovre di emergenza",
+          "─── GESTIONE DEL GONFIORE E CURA DELLA CICATRICE ───",
+          "GONFIORE: elevazione regolare della mano durante la giornata; mentre la mano è sollevata, fare un pugno 5-10 volte rapidamente; massaggio con strofinature lunghe e ferme dalle punte delle dita verso il gomito; crioterapia locale",
+          "CICATRICE (post-chirurgica): massaggio circolare profondo con pressione ferma 3 volte al die x 3 minuti; idratante delicato non profumato; desensibilizzazione con diverse texture (manica di abito, asciugamano) per normalizzare la risposta al tatto",
+          "FUNZIONE LEGGERA: appena rimosso il gesso/bendaggio, usare la mano affetta nelle ADL (lavare i piatti, vestirsi, tastiera); più si usa, più rapido il recupero",
+          "CALORE: applicare calore prima degli esercizi (doccia calda, borsa dell'acqua calda 5-10 min) per facilitare il ROM",
+          "DOLORE: normale una discreta discomfort (VAS ≤5/10); lo stretching deve essere 'sgradevole ma tollerabile' e deve scomparire entro 30 min dal termine dell'esercizio",
+          "─── ESERCIZI DI MOBILITÀ (ROM) ───",
+          "DITA — TENDON GLIDING: sequenza completa di esercizi per le dita per ottenere pugno completo e estensione; usare la mano controlaterale per assistere se rigide; durante le ADL chiudere completamente le dita attorno agli oggetti",
+          "POLLICE — OPPOSIZIONE: toccare la punta di ogni dito con la punta del pollice in sequenza, poi scorrere la punta del pollice lungo il mignolo fino alla base",
+          "FLESSIONE/ESTENSIONE ATTIVA: piegare il polso all'indietro (estensione) fino a sentire tensione, hold 10-15 sec; poi piegare in avanti (flessione), hold 10-15 sec — ripetere 5-10 volte",
+          "SUPINAZIONE/PRONAZIONE ATTIVA: gomito al fianco, ruotare l'avambraccio palmo su (supinazione) poi palmo giù (pronazione), hold 10-15 sec per direzione",
+          "DART THROWER'S MOTION: gomito sul tavolo, tenere una penna con presa leggera, movimento diagonale dal radio verso l'ulnare (come lanciare una freccetta) — ripetere 5 volte",
+          "FLESSIONE/ESTENSIONE PASSIVA: come l'attiva, ma usare la mano sana per spingere ulteriormente nella posizione, hold 30 sec; utile con il polso oltre il bordo del tavolo — ripetere 2 volte",
+          "PRONAZIONE/SUPINAZIONE PASSIVA: gomito al fianco, usare la mano sana per spingere gentilmente al limite della rotazione, hold 30 sec per direzione",
+          "PRAYER STRETCH: palme unite, gomiti flessi; abbassare lentamente le mani mantenendo le palme a contatto, portare i gomiti fuori — hold 30 sec",
+          "ROLLING: appoggiare la mano su superficie irregolare (palla, magazine arrotolato, cuscino); ruolare avanti/indietro lentamente e uniformemente; con palla o cuscino: movimenti circolari o tracciare il proprio nome",
+          "CONTROLLO ROTAZIONE FOREARM: gomito al fianco, palmo su con peso in mano (magazine arrotolato); ruotare lentamente palmo giù poi ritornare — 5 ripetizioni",
+          "─── WEIGHT-BEARING PROGRESSIVO ───",
+          "SU TAVOLO (in piedi): mano piatta sul tavolo, caricare il 25% → 50% → 75% → 100% del peso corporeo, hold 5-10 sec",
+          "SU MURO: in piedi a distanza di un braccio, palme piatte sul muro all'altezza delle spalle, inclinare il corpo verso il muro progressivamente — hold 3-5 sec",
+          "SUL PAVIMENTO: in ginocchio, palme piatte sul pavimento davanti a sé, caricare progressivamente il peso tollerato",
+          "─── RINFORZO ISOMETRICO ───",
+          "FLESSIONE ISOMETRICA: avambraccio sul tavolo palmo su, flettere il polso, con la mano sana spingere contro il palmo resistendo al movimento — hold 3-5 sec, poi rilassare",
+          "ESTENSIONE ISOMETRICA: avambraccio sul tavolo palmo giù, estendere il polso, con la mano sana spingere contro il dorso resistendo — hold 3-5 sec",
+          "PRONAZIONE ISOMETRICA: gomito a 90°, ruotare palmo giù, mano sana sul dorso del polso, resistere alla pronazione — hold 3-5 sec",
+          "SUPINAZIONE ISOMETRICA: gomito a 90°, ruotare palmo su, mano sana sul dorso del polso, resistere alla supinazione — hold 3-5 sec",
+          "─── RINFORZO CON PESI (ogni 2 giorni) ───",
+          "SCEGLIERE IL PESO: deve permettere 10 ripetizioni con il polso leggermente affaticato; progressione fino a 3 serie x 10 rip aumentando il peso",
+          "FLESSIONE CON PESO: avambraccio sul tavolo palmo su, polso oltre il bordo; flettere il polso verso l'alto, hold 5 sec, abbassare lentamente — 10 rip",
+          "ESTENSIONE CON PESO: avambraccio sul tavolo palmo giù, polso oltre il bordo; estendere il polso verso di sé, hold 5 sec, abbassare lentamente — 10 rip",
+          "DEVIATORI DI POLSO: peso in mano con pollice verso il soffitto; piegare il polso verso di sé e hold 5 sec, abbassare lentamente — 10 rip",
+          "SUPINAZIONE/PRONAZIONE CON PESO: gomito al fianco, peso in mano, ruotare palmo su → palmo giù lentamente — 5 ripetizioni",
+          "POWERBALL (giroscopio): rinforzo multidirezionale con resistenza; utile nelle fasi avanzate su indicazione del terapista",
+        ],
+      },
+    ],
+  },
+  {
+    id: 13,
+    category: "Piede e Caviglia",
+    color: "#1A6B5E",
+    icon: "🦿",
+    title: "Distorsione Laterale di Caviglia e Instabilità Cronica (LAS/CAI)",
+    source: "Martin et al. | JOSPT 2021;51(4):CPG1-CPG80 — REVISIONE 2021 | APTA Orthopaedic",
+    pdfUrl2: "https://www.orthopt.org/uploads/content_files/files/jospt.2021.0302.pdf",
+    pdfUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3940495/",
+    tags: ["caviglia", "distorsione", "legamento", "LAS", "CAI", "instabilità", "Ottawa"],
+    summary: "Linee guida CPG per la gestione fisioterapica della distorsione laterale acuta di caviglia (LAS) e dell'instabilità cronica di caviglia (CAI). Include classificazione ICF, Ottawa Rules, terapia manuale, esercizio e prevenzione delle recidive.",
+    sections: [
+      {
+        title: "Classificazione e Diagnosi",
+        content: [
+          "CLASSIFICAZIONE ICF: LAS acuta (primi 1-2 settimane dall'infortunio); CAI = sintomi persistenti >12 mesi con instabilità funzionale e/o meccanica",
+          "OTTAWA ANKLE RULES (evidenza forte): radiografia indicata se dolore alla palpazione sulla punta del malleolo mediale o laterale OPPURE sull'osso navicolare o base del 5° metatarso, con incapacità a caricare peso",
+          "GRADI DI DISTORSIONE: Grado I (stiramento legamentoso, integrità mantenuta); Grado II (rottura parziale, instabilità lieve-moderata); Grado III (rottura completa ATFL ± CFL, instabilità grave)",
+          "LEGAMENTI COINVOLTI: ATFL (Anterior Talo-Fibular Ligament) più frequentemente lesionato; CFL (Calcaneo-Fibular); PTFL (Posterior Talo-Fibular) raramente",
+          "TEST CLINICI: Anterior Drawer Test (sens. 0.96 per ATFL rotto); Talar Tilt Test (CFL); Thompson Test per escludere rottura tendine d'Achille",
+          "OUTCOME MEASURES: FAAM (Foot and Ankle Ability Measure) — MCID = 8 punti per attività quotidiane; FAAM Sport — MCID = 9 punti",
+          "DIAGNOSI DIFFERENZIALE: frattura osteocondrale astragalo, frattura 5° metatarso (Jones), sindrome del seno del tarso, lesione tendine peroneo",
+        ],
+      },
+      {
+        title: "Fattori di Rischio e Prevenzione",
+        content: [
+          "RISCHIO AUMENTATO (evidenza moderata): storia di precedente distorsione, assenza di supporto esterno (tutore/taping), mancato warm-up con stretching statico e dinamico, ridotto ROM in dorsiflessione, assenza di programma propriocettivo",
+          "PREVENZIONE PRIMARIA (evidenza moderata): uso di tutori lace-up o taping in sport ad alto rischio (basket, calcio, pallavolo) riduce incidenza di LAS",
+          "PREVENZIONE RECIDIVE (evidenza forte): programma di esercizio neuro-muscolare/propriocettivo post-LAS riduce rischio di re-infortunio fino al 50%",
+          "Atleti con storia di LAS che non usano supporto esterno hanno incidenza significativamente maggiore di recidive in football e basket (evidenza forte)",
+        ],
+      },
+      {
+        title: "Gestione Acuta (Fase 0-2 Settimane)",
+        content: [
+          "DEVE (evidenza forte): applicare Ottawa Rules prima di inviare a imaging; non richiedere radiografia di routine senza criteri Ottawa",
+          "DEVE (evidenza moderata): avviare carico precoce protetto e mobilizzazione precoce — superiore all'immobilizzazione prolungata per recupero funzionale",
+          "DEVE (evidenza moderata): terapia manuale (mobilizzazioni antero-posteriori dell'astragalo, manipolazioni tibio-peroneali) per recupero ROM dorsiflessione e riduzione dolore",
+          "CONSIDERATE: crioterapia per controllo del dolore e dell'edema nelle prime 72h; FANS a breve termine per dolore acuto",
+          "DEVE: bracing funzionale (tutore semirigido) o taping adesivo come supporto — superiore al gesso per LAS gradi I-II",
+          "NON INDICATO: immobilizzazione con gesso/benda rigida per LAS gradi I-II senza frattura associata",
+          "CRIOTERAPIA: evidenza limitata sull'efficacia oltre la riduzione del dolore immediato; non raccomandato come trattamento isolato nella fase di recupero",
+        ],
+      },
+      {
+        title: "Riabilitazione e Esercizio",
+        content: [
+          "DEVE (evidenza forte): programma di esercizio supervisionato con componenti di — rinforzo peroneali e tibiale anteriore, propriocezione/equilibrio, ROM dorsiflessione, rinforzo catena cinetica arto inferiore",
+          "DEVE: esercizi di equilibrio su superficie instabile (wobble board, BOSU) progressivi: bipodal → monopodal → superfici instabili → compiti cognitivi dual-task",
+          "ESERCIZIO NEURO-MUSCOLARE (evidenza forte per LAS e CAI): specificamente il training propriocettivo riduce recidive — iniziare entro la 1a-2a settimana",
+          "RINFORZO PERONEALI: esercizi isometrici → concentrico/eccentrico con elastico → funzionale — fondamentali per stabilità dinamica",
+          "PROGRESSIONE FUNZIONALE: camminata → corsa in linea retta → corsa curva → cambi di direzione → sport-specifico",
+          "CAI CRONICA: programma neuro-muscolare di almeno 6 settimane; aggiungere terapia manuale per deficit di dorsiflessione residua",
+          "NON INDICATO: ultrasuoni terapeutici, diatermia, elettroterapia — evidenza insufficiente per raccomandazione",
+        ],
+      },
+      {
+        title: "Supporti Esterni e Ritorno allo Sport",
+        content: [
+          "DEVE (evidenza forte): bracing con tutore semirigido o taping per prevenzione recidive durante attività sportiva per almeno 6-12 mesi post-LAS",
+          "TAPING FUNZIONALE: efficace per ridurre rischio recidiva e migliorare propriocezione; scegliere in base a tollerabilità cutanea e contesto sportivo",
+          "KINESIO TAPING: evidenza insufficiente per raccomandazione come alternativa al taping rigido — può essere usato come complemento",
+          "RITORNO ALLO SPORT: criteri funzionali > criteri temporali — valutare: ROM completo, forza peroneale ≥90% controlaterale, hop test monopodalico, assenza di dolore",
+          "LAS GRADO III con instabilità meccanica residua: considerare consulto chirurgico se fallimento trattamento conservativo dopo 3-6 mesi",
+          "FAAM al ritorno sport: punteggio ≥90% rispetto all'arto controlaterale prima del via libera sportivo",
+        ],
+      },
+      {
+        title: "Sintesi CPG — Raccomandazioni Forti (Ruiz-Sánchez et al. 2022)",
+        content: [
+          "FONTE: Ruiz-Sánchez et al. Medicine 2022;101(42):e31087 | PMC9592509 — Revisione sistematica PRISMA di 7 CPG sulla distorsione di caviglia (AGREE II)",
+          "FORTEMENTE RACCOMANDATE (evidenza A): Ottawa Rules per escludere frattura; supporto funzionale (tutore/brace) per 4-6 settimane superiore a immobilizzazione o bendaggio elastico; deambulazione precoce; crioterapia in fase acuta per riduzione dolore ed edema",
+          "FORTEMENTE RACCOMANDATE (evidenza A-B): terapia manuale (mobilizzazioni) — migliora recupero a breve e lungo termine; esercizio terapeutico (propriocezione, rinforzo, equilibrio) — riduce instabilità funzionale e ottimizza recupero articolare",
+          "FANS a breve termine in fase acuta: consigliati (4 CPG su 7, AGREE II score 7); non raccomandati a lungo termine",
+          "IMMOBILIZZAZIONE: max 10 giorni per LAS grado III; non raccomandata >4 settimane; supporto funzionale sempre preferibile al gesso per gradi I-II",
+          "CHIRURGIA: basso grado di raccomandazione per LAS acuta; indicata in instabilità cronica o rottura legamentosa dopo fallimento conservativo — in atleti professionisti può essere scelta precocemente",
+          "NON RACCOMANDATI (evidenza D): ultrasuoni, diatermia, elettroterapia, laser a bassa intensità — nessuna evidenza solida sull'efficacia",
+          "ACUPUNTURA: evidenza controversa; elettroagopuntura e farmacoacupuntura basso grado di raccomandazione; possibile opzione a basso costo/rischio in casi selezionati",
+          "GUIDA DI RIFERIMENTO: Vuurberg et al. 2018 (AGREE II score 9) — documento più completo; integrare con Ottawa Rules e riabilitazione da Kaminski et al. 2019",
+        ],
+      },
+      {
+        title: "Definizioni e Decorso \u2014 Revisione 2021",
+        content: [
+          "\u26A0\uFE0F AGGIORNAMENTO: questa guida segue la REVISIONE 2021 della CPG (Martin et al., JOSPT 2021;51(4):CPG1-CPG80), che sostituisce la versione 2013.",
+          "TERMINOLOGIA 2021: il termine 'subacuto' della CPG 2013 \u00E8 stato sostituito da 'POSTACUTO' per indicare il periodo dalla fase acuta fino ai 12 mesi.",
+          "LAS = distorsione laterale al primo episodio, entro 12 mesi dall'infortunio. CAI = instabilit\u00E0 cronica, sintomi persistenti da 12 mesi o pi\u00F9.",
+          "FASE ACUTA: definita operativamente come 1-2 settimane o meno dall'infortunio.",
+          "DATO CHIAVE: lo studio prospettico di Doherty ha rilevato che il 60% dei soggetti risolve limitazioni di attivit\u00E0 e restrizioni di partecipazione entro 12 mesi, mentre il 40% sviluppa CAI. Stima molto pi\u00F9 alta rispetto agli studi retrospettivi.",
+          "EPIDEMIOLOGIA: prevalenza aggregata dell'11.88% nella popolazione generale. Solo circa il 50% di chi subisce una distorsione cerca assistenza medica, e di questi solo il 6.8-11.0% viene inviato a uno specialista della riabilitazione entro 30 giorni.",
+          "SPORT: il 40% delle distorsioni avviene durante attivit\u00E0 sportiva. Sport indoor e di campo coperto (pallavolo, basket) 7 distorsioni per 1000 esposizioni-atleta; sport di campo aperto (calcio, football, rugby) incidenza molto inferiore, 1 per 1000.",
+          "CALCIO: il tempo medio perso dopo distorsione \u00E8 di 12-15 giorni; nel rugby 24 giorni. Il 13.7% dei calciatori d'\u00E9lite subisce distorsioni recidivanti.",
+          "\u2500\u2500\u2500 FATTORI DI RISCHIO \u2014 SINTESI 2021 \u2500\u2500\u2500",
+          "PER LAS ACUTA: sesso femminile, DEBOLEZZA DEGLI ABDUTTORI E ESTENSORI D'ANCA, scarsa performance nei test di equilibrio e di hopping, pratica di sport indoor.",
+          "\u2192 Nei calciatori maschi, una forza degli abduttori d'anca inferiore al 33.8% del peso corporeo porta la probabilit\u00E0 di distorsione dall'11.9% al 26.7%.",
+          "PER CAI: non usare bracing profilattico, non partecipare a un programma di equilibrio, scarsa performance funzionale dopo la distorsione, praticare sport, BMI pi\u00F9 elevato.",
+          "\u26A0\uFE0F PREDITTORE PRECOCE DI CAI: l'incapacit\u00E0 di completare compiti di salto e atterraggio entro 2 settimane dal primo episodio predice CAI a 6 mesi (sensibilit\u00E0 83%, specificit\u00E0 55%). I test clinici di ROM, gonfiore, lassit\u00E0 e glide posteriore entro 2 settimane hanno invece valore predittivo limitato (accuratezza 68.8%).",
+          "COPERS: chi recupera dopo LAS \u00E8 definito 'coper'. Copers e soggetti con CAI si distinguono per i pattern di movimento in equilibrio dinamico, cammino, step-down, corsa e atterraggio: i copers hanno biomeccanica pi\u00F9 simile ai sani.",
+          "TEMPI: il ritorno completo alla partecipazione va da 1 giorno a poco pi\u00F9 di 3 settimane secondo le richieste dell'attivit\u00E0. Il recupero completo senza sintomi n\u00E9 limitazioni pu\u00F2 per\u00F2 richiedere mesi o anni, e non pu\u00F2 essere atteso in tutti i pazienti."
+        ]
+      },
+      {
+        title: "Diagnosi ed Esame \u2014 Raccomandazioni 2021",
+        content: [
+          "\u2500\u2500\u2500 DIAGNOSI DI LAS (Grado B) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO usare test speciali, inclusi il REVERSE ANTEROLATERAL DRAWER TEST e la PALPAZIONE ANTEROLATERALE DELL'ASTRAGALO in aggiunta al tradizionale anterior drawer test, insieme ad anamnesi ed esame obiettivo accurati.",
+          "\u26A0\uFE0F NOVIT\u00C0 2021: il test del cassetto anteriore tradizionale ha affidabilit\u00E0 e accuratezza limitate. Confronto diretto: sensibilit\u00E0 media 0.224 per l'ADT, 0.473 per l'ALDT, 0.894 per il RALDT; accuratezza 0.590 / 0.715 / 0.896 rispettivamente.",
+          "PALPAZIONE ANTEROLATERALE DELL'ASTRAGALO: sensibilit\u00E0 1.0, specificit\u00E0 0.77, accuratezza complessiva 91.3%, contro accuratezza 69.6% dell'ADT tradizionale. Va usata come COMPLEMENTO all'ADT, non in sostituzione.",
+          "\u2500\u2500\u2500 DIAGNOSI DI CAI (Grado B) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO usare uno strumento discriminativo affidabile e valido, come il Cumberland Ankle Instability Tool (CAIT) o l'Identification of Functional Ankle Instability (IdFAI), insieme a una batteria di test di performance funzionale con validit\u00E0 stabilita.",
+          "CAIT: cut-off aggiornato a 25 o meno (ridotto di 2 punti rispetto al precedente) \u2014 sensibilit\u00E0 96.6%, specificit\u00E0 86.8%, LR+ 7.31, LR\u2212 0.39. MDC 3.08 e MCID \u22653 punti.",
+          "IdFAI: 10 domande, punteggio 0-37; \u226511 indica probabile CAI. Affidabilit\u00E0 test-retest 0.92; predice l'87.8% dei casi che soddisfano i criteri minimi di CAI, meglio dell'uso combinato di CAIT e AII.",
+          "TEST FUNZIONALI DISCRIMINATIVI: side hop, timed hop, multiple hop test, foot-lift test e le direzioni mediale, anteromediale e posteromediale dello Star Excursion Balance Test differenziano CAI dai controlli sani.",
+          "CUT-OFF PRATICI: 5 errori al foot-lift test e 91% di reach in direzione posteromediale allo SEBT identificano i soggetti con CAI; 12.88 secondi al single-leg hop test.",
+          "\u2500\u2500\u2500 DIAGNOSI DIFFERENZIALE \u2500\u2500\u2500",
+          "La caviglia \u00E8 la regione pi\u00F9 frequentemente mal diagnosticata in pronto soccorso. Le OTTAWA ANKLE RULES restano lo standard di riferimento per escludere fratture: sensibilit\u00E0 92-100%, specificit\u00E0 7.8-68%.",
+          "\u26A0\uFE0F Le Ottawa rules vanno applicate INTEGRALMENTE: usare solo la capacit\u00E0 di carico e 4 passi, omettendo la dolorabilit\u00E0 malleolare, riduce la sensibilit\u00E0 all'88%.",
+          "L'esame obiettivo per le lesioni dei tessuti molli \u00E8 pi\u00F9 accurato se eseguito 4-5 giorni dopo il trauma. Con RM sono state confermate co-patologie nel 92% dei casi dopo distorsione acuta.",
+          "CO-PATOLOGIE DA CONSIDERARE: lesione sindesmotica, lesioni osteocondrali, contusione ossea astragalica, lesione del deltoideo, lesioni tendinee (Achille, peronei), os trigonum, distorsioni del mesopiede, lesioni epifisarie.",
+          "\u2500\u2500\u2500 MISURE DI ESITO (Grado A) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO usare misure validate riferite dal paziente \u2014 scale PROMIS di funzione fisica e interferenza del dolore, FAAM, LEFS \u2014 prima e una o pi\u00F9 volte dopo gli interventi.",
+          "(Grado C) I clinici POSSONO usare il Pain Self-Efficacy Questionnaire nelle fasi acuta e postacuta, e la Tampa Scale of Kinesiophobia a 11 item e il Fear-Avoidance Beliefs Questionnaire nei soggetti con CAI.",
+          "\u2500\u2500\u2500 MISURE DI IMPAIRMENT (Grado A) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO valutare e documentare gonfiore, ROM, traslazione e inversione astragalica ed equilibrio monopodalico al basale e ALMENO 2 VOLTE nel corso del trattamento.",
+          "SPECIFICAMENTE: dorsiflessione con il WEIGHT-BEARING LUNGE TEST; equilibrio statico monopodalico su superficie rigida a occhi chiusi; equilibrio dinamico con lo SEBT nelle direzioni anteriore, anteromediale, posteromediale e posterolaterale.",
+          "(Grado C) Nei soggetti con CAI i clinici POSSONO valutare anche forza di abduzione, estensione e rotazione esterna dell'anca, 2 o pi\u00F9 volte nel corso del trattamento.",
+          "\u2500\u2500\u2500 PERFORMANCE FISICA (Grado B) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO valutare limitazione di attivit\u00E0, restrizione di partecipazione e riproduzione dei sintomi al basale e almeno 2 volte, includendo misure di HOPPING MONOPODALICO A TEMPO quando appropriato.",
+          "\u26A0\uFE0F L'hopping va eseguito in sicurezza e solo dopo che il paziente \u00E8 stato progredito adeguatamente lungo il continuum di attivit\u00E0."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Prevenzione e Fase Acuta (2021)",
+        content: [
+          "\u2500\u2500\u2500 PREVENZIONE PRIMARIA (primo episodio) \u2500\u2500\u2500",
+          "(A) I clinici DOVREBBERO raccomandare il BRACING PROFILATTICO per ridurre il rischio di un primo episodio, in particolare in chi presenta fattori di rischio.",
+          "(C) I clinici POSSONO raccomandare esercizi profilattici di equilibrio a chi non ha ancora subito una distorsione.",
+          "\u2500\u2500\u2500 PREVENZIONE SECONDARIA (dopo il primo episodio) \u2500\u2500\u2500",
+          "(A) I clinici DOVREBBERO prescrivere bracing profilattico E usare programmi di esercizio terapeutico propriocettivo e centrato sull'equilibrio per ridurre il rischio di un nuovo infortunio.",
+          "\u2500\u2500\u2500 PROTEZIONE E CARICO OTTIMALE (Grado A) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO consigliare supporti esterni (tutori o taping) e il CARICO PROGRESSIVO sull'arto affetto. Tipo di supporto e ausilio vanno scelti in base a severit\u00E0 della lesione, fase di guarigione tissutale, livello di protezione necessario, entit\u00E0 del dolore e preferenza del paziente.",
+          "(A) Nelle lesioni pi\u00F9 severe l'immobilizzazione, dal tutore semirigido al gesso sotto il ginocchio, pu\u00F2 essere indicata fino a 10 GIORNI dall'infortunio.",
+          "\u2500\u2500\u2500 ESERCIZIO TERAPEUTICO (Grado A) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO implementare programmi riabilitativi con componente strutturata di esercizio terapeutico, che pu\u00F2 includere ROM attivo protetto, stretching, training neuromuscolare, rieducazione posturale e training dell'equilibrio, sia in clinica sia a domicilio.",
+          "(D) Evidenza conflittuale su come integrare al meglio le componenti non supervisionate del programma domiciliare (istruzioni scritte, videogiochi basati su esercizio, app): la scelta dipende dalle esigenze di apprendimento e dall'accesso alla tecnologia.",
+          "\u2500\u2500\u2500 TERAPIA MANUALE (Grado A) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO usare procedure di terapia manuale \u2014 drenaggio linfatico, mobilizzazione attiva e passiva dei tessuti molli e articolare, mobilizzazione astragalica antero-posteriore \u2014 entro il movimento indolore e ACCANTO all'esercizio terapeutico, per ridurre il gonfiore, migliorare la mobilit\u00E0 indolore e normalizzare i parametri del cammino.",
+          "\u2500\u2500\u2500 LAVORO E SPORT (Grado B) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO implementare un programma di ritorno al lavoro e usare un tutore precocemente in riabilitazione, con training occupazionale o sport-specifico e/o programma di work hardening.",
+          "\u2500\u2500\u2500 AGENTI FISICI \u2500\u2500\u2500",
+          "CRIOTERAPIA (C): i clinici POSSONO usare applicazioni ripetute e intermittenti di ghiaccio in associazione a un programma di esercizio terapeutico.",
+          "DIATERMIA (C): pu\u00F2 essere utilizzata la diatermia a onde corte pulsate per ridurre edema e deviazioni del cammino.",
+          "LASER A BASSA INTENSIT\u00C0 (C): i clinici POSSONO usarlo per ridurre il dolore nella fase iniziale.",
+          "\u26A0\uFE0F ULTRASUONI (A): i clinici NON DEVONO usare gli ultrasuoni nella gestione delle distorsioni acute.",
+          "ELETTROTERAPIA (D): evidenza moderata sia a favore sia contro. Nessuna raccomandazione.",
+          "AGOPUNTURA (D): evidenza conflittuale. Nessuna raccomandazione.",
+          "FANS (C): i clinici POSSONO prescriverli, dove consentito dalla normativa professionale, per ridurre dolore e gonfiore."
+        ]
+      },
+      {
+        title: "Interventi \u2014 Instabilit\u00E0 Cronica e Fattori Psicologici (2021)",
+        content: [
+          "\u2500\u2500\u2500 SUPPORTO ESTERNO \u2014 ATTENZIONE (Grado B) \u2500\u2500\u2500",
+          "\u26A0\uFE0F I clinici NON DEVONO usare supporti esterni, tutori o taping, come INTERVENTO ISOLATO per migliorare equilibrio e stabilit\u00E0 posturale nei soggetti con CAI.",
+          "\u2192 Differenza importante rispetto alla LAS acuta, dove il bracing \u00E8 raccomandato con grado A. Nella CAI il tutore da solo non basta: serve il lavoro attivo.",
+          "\u2500\u2500\u2500 ESERCIZIO TERAPEUTICO (Grado A) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO prescrivere esercizio terapeutico PROPRIOCETTIVO E NEUROMUSCOLARE per migliorare la stabilit\u00E0 posturale dinamica e la stabilit\u00E0 percepita dal paziente durante la funzione.",
+          "PREDITTORI DI SUCCESSO: nei soggetti con CAI, predittori significativi di miglioramento con un programma di equilibrio sono un reach posteromediale allo SEBT \u226485.18% e un punteggio FAAM ADL o FADI \u226492.55% al basale. Chi soddisfa entrambi i criteri ha il 70% di probabilit\u00E0 di esito positivo.",
+          "\u2500\u2500\u2500 TERAPIA MANUALE (Grado A) \u2500\u2500\u2500",
+          "I clinici DOVREBBERO usare procedure di terapia manuale \u2014 mobilizzazioni articolari graduate, manipolazioni, mobilizzazione con movimento in carico e non in carico \u2014 per migliorare la dorsiflessione in carico e l'equilibrio dinamico a BREVE TERMINE.",
+          "PREDITTORE: un test di equilibrio monopodalico con \u22655 errori predice il successo con le mobilizzazioni articolari (LR+ 33.3); con \u22652 errori predice il successo con il massaggio plantare (LR+ 62.5).",
+          "\u2500\u2500\u2500 DRY NEEDLING (Grado C) \u2500\u2500\u2500",
+          "I clinici POSSONO usare il dry needling del gruppo dei peronei, IN ASSOCIAZIONE a un programma di training propriocettivo, per ridurre il dolore e migliorare la funzione.",
+          "\u2500\u2500\u2500 TRATTAMENTI COMBINATI (Grado B) \u2500\u2500\u2500",
+          "I clinici POSSONO usare interventi multipli a integrazione del training dell'equilibrio nel corso del trattamento, combinando esercizio e procedure di terapia manuale secondo valori e obiettivi del paziente.",
+          "\u2500\u2500\u2500 FATTORI PSICOLOGICI (Grado E) \u2500\u2500\u2500",
+          "I clinici POSSONO usare tecniche psicologicamente informate, come il COLLOQUIO MOTIVAZIONALE, per massimizzare l'autoefficacia del paziente e affrontare i correlati psicologici non complicati dell'adattamento e del recupero, sia nella LAS sia nella CAI.",
+          "RAZIONALE: strategie efficaci di coping del dolore e et\u00E0 pi\u00F9 giovane si associano a minori sintomi e limitazioni a 3 settimane, mentre la severit\u00E0 della lesione no. Maggiore chinesiofobia si associa a minore fiducia allo SEBT e nel salto verticale.",
+          "\u2500\u2500\u2500 CHIRURGIA \u2500\u2500\u2500",
+          "Un consenso basato su revisione sistematica raccomanda un trattamento NON chirurgico per 3-6 mesi prima di considerare la chirurgia per la CAI.",
+          "\u26A0\uFE0F Chi ha subito una LAS e non ha cercato trattamento medico presenta una funzione soggettiva peggiore."
+        ]
+      }
+    ],
+  },
+  {
+    id: 6,
+    category: "Piede e Caviglia",
+    color: "#1A6B5E",
+    icon: "🦶",
+    title: "Alluce Valgo (Hallux Valgus)",
+    source: "AOFAS / EFAS 2022 | MGH Physical Therapy Guidelines for Hallux Valgus Correction",
+    pdfUrl: "https://www.massgeneral.org/assets/MGH/pdf/orthopaedics/foot-ankle/PT-guidelines-hallux-valgus-correction-final.pdf",
+    tags: ["piede", "alluce valgo", "chirurgia"],
+    summary: "Diagnosi e trattamento dell'alluce valgo sintomatico, con indicazioni per le diverse procedure chirurgiche.",
+    sections: [
+      {
+        title: "Classificazione della Severità",
+        content: [
+          "Lieve: angolo HV 15-25°, angolo IM 9-11°",
+          "Moderata: angolo HV 25-40°, angolo IM 11-16°",
+          "Severa: angolo HV > 40°, angolo IM > 16°",
+          "Congruenza articolare: determina la scelta della tecnica chirurgica",
+          "Valutazione DMAA (Distal Metatarsal Articular Angle) per pianificazione",
+        ],
+      },
+      {
+        title: "Trattamento Conservativo",
+        content: [
+          "Calzature larghe con allargamento nell'area dell'alluce",
+          "Inserti ortopedici personalizzati per ridistribuzione dei carichi",
+          "Distanziatori inter-digitali in silicone",
+          "Fisioterapia: rinforzo muscoli intrinseci del piede",
+          "NON modificano la progressione della deformità ma possono controllare i sintomi",
+        ],
+      },
+      {
+        title: "Indicazioni Chirurgiche",
+        content: [
+          "Dolore persistente nonostante 6 mesi di terapia conservativa",
+          "Deformità severa con interferenza con calzatura",
+          "Sublussazione articolare MTF con rischio di artrosi",
+          "Presenza di metatarsalgia secondaria da trasferimento del carico",
+        ],
+      },
+      {
+        title: "Procedure Chirurgiche Principali",
+        content: [
+          "Osteotomia distale (Chevron/Austin): deformità lieve-moderata, IM < 13°",
+          "Osteotomia diafisaria (Scarf): deformità moderata, IM 12-16°",
+          "Osteotomia prossimale: deformità severa, IM > 16°",
+          "Artrodesi MTF (Lapidus): instabilità cuneometatarsale, deformità severa ricorrente",
+          "Artrodesi MTF: alluce valgo con artrosi severa, artrite reumatoide",
+        ],
+      },
+      {
+        title: "Protocollo Riabilitativo Post-Op Alluce Valgo — 6 Fasi (MGH)",
+        content: [
+          "FONTE: MGH Physical Therapy Services — PT Guidelines for Hallux Valgus Correction (Bunion Reconstruction). Link PDF disponibile. ⚠️ La competenza delle dita (toe competency) deve essere mantenuta per tutta la riabilitazione: NESSUNA benda o compressione che alteri l'allineamento post-operatorio. Scarpe con punta larga e lunga; NO scarpe che stringano le dita.",
+          "PREOPERATORIO: istruzione all'uso dell'ausilio deambulatorio (NWB sul lato affetto); dimostrazione deambulazione sicura NWB con scale e trasferimenti.",
+          "─── FASE 1 — POST-OP 0-2 SETTIMANE ───",
+          "RESTRIZIONI: non-weight-bearing (NWB); tutore post-operatorio sempre indossato; elevazione stretta ('dita sopra il naso')",
+          "OBIETTIVI: gestione edema e dolore; deambulazione sicura NWB con ausilio; ADL in modalità modificata o con assistenza minima; prevenzione infezioni",
+          "TRATTAMENTO: AROM anca e ginocchio; elevazione dell'arto inferiore coinvolto sopra il livello del cuore per tutta la giornata",
+          "─── FASE 2 — 2-6 SETTIMANE ───",
+          "RESTRIZIONI: NO mobilizzazione articolare delle articolazioni fuse; OSTEOTOMIA: boot sempre indossato (rimuovere 2-3 volte/die per HEP, dormire con boot), inizio graduale weight-bearing parziale; ARTRODESI/FUSIONE: gesso corto sempre indossato, solo touch-down weight-bearing",
+          "OBIETTIVI: proteggere il sito di osteotomia/fusione; aumentare ROM della 1ª MTF e della caviglia; minimizzare la perdita di forza di core, anca e ginocchio; gestire il gonfiore; mobilizzazione cicatrice",
+          "TRATTAMENTO: ispezione incisione/cicatrice; AROM e PROM caviglia (attenzione al posizionamento delle mani per evitare pressione sui siti chirurgici); esercizi AROM/PROM 1ª MTF; rinforzo core, anca e ginocchio; gait training per heel touch weight-bearing; mobilizzazione cicatrice quando l'incisione è completamente guarita",
+          "─── FASE 3 — 6-10 SETTIMANE ───",
+          "RESTRIZIONI: NO mobilizzazione articolazioni fuse; OSTEOTOMIA: progressione a full weight-bearing in boot per indicazione del chirurgo; ARTRODESI: come Fase 2, progressione graduale del carico",
+          "OBIETTIVI: ROM completo piede e caviglia; forza piede e caviglia aumentata; gait normalizzato in boot; ripristino endurance cardiovascolare",
+          "TRATTAMENTO: AROM/PROM caviglia e MTF, stretching; rinforzo piede e caviglia; mobilizzazioni articolari del piede e caviglia con stabilizzazione (evitare il sito di osteotomia/fusione); continuare rinforzo core, anca, ginocchio; gait training per svezzamento ausili in boot; cyclette senza pressione sull'avampiede (Lapidus: non prima di 10 settimane)",
+          "─── FASE 4 — 10-14 SETTIMANE ───",
+          "RESTRIZIONI: NO mobilizzazione articolazioni fuse (se applicabile); svezzamento dal boot verso scarpa da ginnastica con punta ampia e lunga; camminata in piscina",
+          "OBIETTIVI: pieno carico in scarpa con buona tolleranza; gait pattern normale; controllo motorio normalizzato dell'arto inferiore; forza completa di core e arti inferiori",
+          "TRATTAMENTO: continuare rinforzo, ROM e condizionamento; inizio esercizi propriocettivi, equilibrio e controllo motorio in catena chiusa (CKC); cyclette, nuoto",
+          "─── FASE 5 — 14-20 SETTIMANE ───",
+          "RESTRIZIONI: NO mobilizzazione articolazioni fuse; progressione attività per indicazione del FT",
+          "OBIETTIVI: buon equilibrio e controllo monopodal in tutti i piani; ritorno a tutte le attività (non sport) se obiettivi di forza, gait e ROM raggiunti",
+          "TRATTAMENTO: continuare trattamento come sopra; attività monopodali su superfici variabili; progressione functional training verso movimenti sport-specifici; assistenza nella scelta di calzatura casual/elegante",
+          "─── FASE 6 — 20+ SETTIMANE ───",
+          "OBIETTIVI: ritorno graduale a sport a basso impatto → alto impatto",
+          "TRATTAMENTO: training e condizionamento sport-specifico partendo da basso impatto (ciclismo, canottaggio, nuoto, Stairmaster, ellittica) con progressione verso alto impatto (corsa, salti) quando i precedenti sono tollerati senza dolore",
+        ],
+      },
+    ],
+  },
+  {
+    id: 7,
+    category: "Rachide",
+    color: "#8B3A3A",
+    icon: "🔩",
+    title: "Dolore Cervicale — Linee Guida JOSPT 2017",
+    source: "Blanpied et al. | JOSPT 2017;47(7):A1-A83 | APTA Orthopaedic Section",
+    tags: ["cervicale", "neck pain", "whiplash", "WAD", "cefalea cervicogenica", "radiculopatia"],
+    summary: "Linee guida evidence-based per la diagnosi e il trattamento fisioterapico del dolore cervicale, classificato in 4 categorie ICF: deficit di mobilità, deficit di coordinazione motoria (WAD), cefalea associata e dolore radicolare.",
+    sections: [
+      {
+        title: "Classificazione Diagnostica ICF (Grado C)",
+        content: [
+          "Dolore cervicale con DEFICIT DI MOBILITÀ: limitazione ROM cervicale/toracico, dolore riproducibile a fine range, restrizione segmentale",
+          "Dolore cervicale con DEFICIT DI COORDINAZIONE MOTORIA (WAD): esordio traumatico/whiplash, test cranio-cervicale flessione positivo, deficit forza/endurance collo, ipersensibilità pressoria",
+          "Dolore cervicale con CEFALEA (cervicogenica): cefalea unilaterale non continua aggravata da movimenti cervicali, Cervical Flexion-Rotation Test positivo, restrizione segmentaria C1-2",
+          "Dolore cervicale con DOLORE RADICOLARE: dolore a banda stretta nell'arto superiore, parestesie dermatomiche, deficit sensitivo/motorio/riflessi — test cluster: Spurling, distrazione, ULTT mediano",
+          "NOTA: le categorie non sono esclusive; rivalutare continuamente la classificazione nel corso del trattamento",
+        ],
+      },
+      {
+        title: "Valutazione e Misure di Outcome (Grado A–B)",
+        content: [
+          "QUESTIONARI VALIDATI (Grado A): Neck Disability Index (NDI) — cut-off prognostico > 30%; PSFS; SF-36/SF-12; VAS",
+          "ROM CERVICALE (Grado I): dispositivo CROM, goniometro o inclinometro — buona affidabilità e validità",
+          "CERVICAL FLEXION-ROTATION TEST (CFRT): ROM medio 39-45° in sani vs 20-28° in cefalea cervicogenica; cut-off < 32° o differenza ≥10°; Sens 0.90-0.95 / Spec 0.90-0.97; LR+ 9.0-9.4",
+          "SOGLIA DOLORE DA PRESSIONE (algometria trapezio): ICC 0.96 intrarater; valori ridotti localmente = ipersensibilità meccanica; riduzione diffusa = sensibilizzazione centrale",
+          "PROGNOSI WAD (Grado moderato-alto): raccogliere VAS (≥6 rischio cronicità), NDI (>30%), Pain Catastrophizing Scale (≥20), Impact of Events Scale-R (≥33), iperalgesie da freddo",
+        ],
+      },
+      {
+        title: "Interventi — Deficit di Mobilità (Grado B–C)",
+        content: [
+          "ACUTO (Grado B): manipolazione toracica + esercizi ROM cervicale + stretching e rinforzo scapolo-toracico e arto superiore",
+          "ACUTO (Grado C): manipolazione e/o mobilizzazione cervicale",
+          "SUBACUTO (Grado B): esercizi di endurance cervicale e cingolo scapolare",
+          "SUBACUTO (Grado C): manipolazione toracica ± manipolazione/mobilizzazione cervicale",
+          "CRONICO (Grado B — approccio multimodale): manipolazione toracica + mobilizzazione/manipolazione cervicale + esercizio misto cervico-scapolo-toracico (neuromuscolare, propriocettivo, posturale, stretching, rinforzo, aerobico, componente cognitivo-affettiva) + dry needling, laser o trazione intermittente meccanica",
+          "CRONICO (Grado C): endurance cervicale/tronco + educazione e counseling stile di vita attivo",
+        ],
+      },
+      {
+        title: "Interventi — WAD / Deficit Coordinazione (Grado B–C)",
+        content: [
+          "ACUTO — recupero atteso rapido (Grado B): educazione (riprendere attività pre-trauma appena possibile, minimizzare uso collare, esercizi posturali/mobilità); rassicurazione sul recupero entro 2-3 mesi",
+          "ACUTO — recupero moderato-lento (Grado B): approccio multimodale: tecniche di mobilizzazione manuale + esercizio (rinforzo, endurance, flessibilità, posturale, coordinazione, aerobico)",
+          "ACUTO — basso rischio cronicità (Grado C): singola sessione educazione + istruzione esercizi; programma esercizi completo; TENS",
+          "MONITORAGGIO (Grado F): identificare precocemente pazienti con recupero ritardato per intensificare la riabilitazione e avviare pain education",
+          "CRONICO (Grado C): educazione (prognosi, incoraggiamento, pain management) + mobilizzazione + programma esercizi progressivo submassimale cervico-toracico con principi TCC + TENS",
+        ],
+      },
+      {
+        title: "Interventi — Cefalea Cervicogenica (Grado B–C)",
+        content: [
+          "ACUTO (Grado B): esercizi di mobilità attiva supervisionati",
+          "ACUTO (Grado C): self-SNAG C1-2 (auto-mobilizzazione apofisaria sostenuta)",
+          "SUBACUTO (Grado B): manipolazione e mobilizzazione cervicale",
+          "SUBACUTO (Grado C): self-SNAG C1-2",
+          "CRONICO (Grado B): manipolazione/mobilizzazione cervicale o cervico-toracica + stretching, rinforzo ed endurance cervicale e cingolo scapolare",
+          "CRONICO (Grado B — multimodale): manipolazione/mobilizzazione + esercizi (stretching, rinforzo, endurance, training neuromuscolare con biofeedback e motor control)",
+        ],
+      },
+      {
+        title: "Interventi — Dolore Radicolare Cervicale (Grado B–C)",
+        content: [
+          "ACUTO (Grado C): esercizi di mobilizzazione e stabilizzazione cervicale + laser + eventuale collare a breve termine",
+          "CRONICO (Grado B): trazione cervicale meccanica intermittente + stretching/rinforzo + mobilizzazione/manipolazione cervicale e toracica",
+          "CRONICO (Grado B): educazione e counseling per promuovere partecipazione ad attività lavorative e fisiche",
+          "NON indicata trazione continua (nessun beneficio vs controllo)",
+          "MIELOPATIA cervicale moderata-severa: la trazione è controindicata",
+        ],
+      },
+      {
+        title: "Imaging e Red Flags (Grado A)",
+        content: [
+          "SCREENING OBBLIGATORIO per patologie serie: infezione, neoplasia, insufficienza arteriosa, instabilità legamentosa C1-2, disfunzione nervi cranici, frattura",
+          "CANADIAN CERVICAL SPINE RULE (CCR): alto rischio se età ≥65, meccanismo pericoloso, parestesie arto sup → TC/Rx. Basso rischio se: seduto in PS, collisione posteriore semplice, deambulante, dolore ad esordio ritardato, no dolorabilità sulla linea mediana + rotazione attiva ≥45° → nessun imaging",
+          "CRITERI NEXUS: Rx indicata in traumi a meno che: no dolorabilità linea mediana, no intossicazione, coscienza normale, no deficit neurologico focale, no lesioni dolorose distrattrici",
+          "DEFICIT DI MOBILITÀ (acuto/cronico senza red flags): nessun imaging indicato",
+          "DOLORE RADICOLARE con segni neurologici: RMN colonna cervicale da C0 al tratto toracico superiore. Se controindicazione RMN: TC-mielografia",
+          "RMN è imaging di scelta per mielopatia. NON indicata RMN routinaria dei legamenti alari/trasverso in pazienti con whiplash",
+        ],
+      },
+    ],
+  },
+  // ---- LET Tennis Elbow ----
+  {
+    id: 8,
+    category: "Gomito",
+    color: "#6B3A2E",
+    icon: "💪",
+    title: "Tendinopatia Epicondilare Laterale (Tennis Elbow) — Toolkit",
+    source: "Lucado et al. | JOSPT 2022;52(12):CPG1-CPG111 | APTA Orthopedics | BC Physical Therapy Tendinopathy Task Force \u2014 Physiopedia LET Toolkit",
+    pdfUrl: "https://www.jospt.org/doi/10.2519/jospt.2022.0302",
+    tags: ["gomito", "epicondilite", "tennis elbow", "tendinopatia", "LET", "ECRB"],
+    summary: "Toolkit evidence-based per la gestione della tendinopatia epicondilare laterale (LET). Include algoritmo clinico, valutazione, outcome measures, esercizio (isometrico/concentrico/eccentrico), terapia manuale, LLLT, ESWT, ortesi e taping.",
+    sections: [
+      {
+        title: "Valutazione Clinica e Diagnosi",
+        content: [
+          "Dolore laterale al gomito correlato a sovraccarico, localizzato all'inserzione ECRB/origine comune estensori sull'epicondilo laterale",
+          "TEST CLINICI: palpazione epicondilo laterale; Mills Test (stiramento passivo estensori); Cozen/Maudsley/Thomsen (resistenza isometrica estensori/dito medio)",
+          "OUTCOME MEASURES: PRTEE (Patient Rated Tennis Elbow Evaluation) — 15 item, MCID=11, MDC=9; NPRS per intensità dolore; PFGT (Pain Free Grip Test) con dinamometro",
+          "IMAGING: non necessaria di routine; utile se quadro atipico o mancata risposta al trattamento conservativo per escludere patologie intra/extra-articolari",
+          "DIAGNOSI DIFFERENZIALE: intrappolamento nervo interosseo posteriore (tunnel radiale), radiculopatia cervicale, instabilità legamentosa posterolaterale, artrite radio-capitellare, sinovite plica",
+          "FATTORI BIOPSICOSOCIALI: catastrofizzazione e distress psicologico aggravano LET cronica — includere pain neuroscience education se presenti",
+        ],
+      },
+      {
+        title: "Terapia Manuale",
+        content: [
+          "MOBILIZZAZIONI GOMITO — ACUTA (Può considerare): MWM (Mobilization with Movement) o manipolazione di Mill's — evidenza minima ma supporto da expert opinion",
+          "MOBILIZZAZIONI GOMITO — CRONICA (Fortemente considerare): MWM particolarmente indicata; effetti evidenti entro i primi trattamenti, potenziati dall'aggiunta di esercizio. Moderata effect size su dolore, forza grip e funzione a tutti i timeframe",
+          "TECNICHE SPINALI — ACUTA (Può considerare): mobilizzazione cervicale e/o toracica",
+          "TECNICHE SPINALI — CRONICA (Considerare): mobilizzazione/manipolazione cervico-toracica + neuromobilizzazione nervo radiale in pazienti con segni spinali anche senza dolore spinale riferito",
+          "TECNICHE TESSUTI MOLLI — ACUTA (Può considerare): massaggio profondo/superficiale per effetto analgesico immediato",
+          "TECNICHE TESSUTI MOLLI — CRONICA (Può considerare): frizioni trasversali profonde (Cyriax) in approccio multimodale",
+        ],
+      },
+      {
+        title: "Esercizio Terapeutico — Cardine del Trattamento",
+        content: [
+          "ACUTA (Può considerare): esercizio (rinforzo, stretching, fitness generale) — evidenza limitata ma supporto clinico",
+          "CRONICA (Fortemente considerare): esercizio locale E catena cinetica dell'arto superiore — quasi tutti gli studi mostrano miglioramenti indipendentemente dal tipo",
+          "NESSUN tipo di esercizio superiore agli altri: isometrico, concentrico ed eccentrico mostrano risultati comparabili — scegliere in base alla tolleranza del paziente",
+          "ISOMETRICO: ottimo punto di partenza, riduzione dolore immediata, utile nelle fasi acute/irritabili",
+          "ECCENTRICO: storicamente gold standard, ma non superiore ad altri in LET — includere come opzione, non unica scelta",
+          "CONCENTRICO-ECCENTRICO (HSR): indicato nelle fasi subacute/croniche per ottimizzare il carico tendineo",
+          "Includere stretching degli estensori del polso come complemento al rinforzo",
+          "Progressione: isometrico → concentrico/eccentrico → pliometrico → sport/lavoro specifico",
+        ],
+      },
+      {
+        title: "Trattamenti Fisici Aggiuntivi",
+        content: [
+          "LLLT (Laser bassa intensità) — ACUTA (Considerare): evidenza per riduzione dolore a breve termine; seguire dosaggi WALT",
+          "LLLT — CRONICA (Considerare): efficace su dolore a breve/medio termine; class IV laser (alta intensità) opzione aggiuntiva per cronico",
+          "ESWT (Shockwave) — CRONICA (Considerare): evidenza per dolore e funzione a breve/medio termine come aggiunta all'esercizio eccentrico",
+          "DRY NEEDLING — CRONICA (Può considerare): evidenza limitata ma promettente per trigger points ECRB/estensori",
+          "AGOPUNTURA — CRONICA (Può considerare): possibile riduzione dolore a breve termine",
+          "ULTRASUONI (terapeutici) — CRONICA (Può considerare): evidenza debole; inferiore ad altre modalità — non raccomandato come prima scelta",
+          "IONOFORESI — ACUTA (Considerare): indicata per sintomi acuti (<6 settimane) come aggiunta al trattamento di base",
+        ],
+      },
+      {
+        title: "Ortesi, Taping e Gestione del Carico",
+        content: [
+          "COUNTERFORCE BRACE (fascia epicondilare) — CRONICA (Può considerare): riduzione dolore a breve termine durante attività, non modifica la prognosi a lungo termine",
+          "WRIST EXTENSION SPLINT (tutore polso in estensione) — CRONICA (Può considerare): riduzione dolore durante attività funzionali",
+          "TAPING (rigido o kinesio) — CRONICA (Può considerare): miglioramento immediato dolore e grip strength; kinesio tape opzione per tollerabilità",
+          "GESTIONE DEL CARICO: educazione alla modificazione delle attività provocanti; approccio empatico alle limitazioni lavorative",
+          "FOLLOW-UP: rivalutare sintomi a 12 settimane; se nessun miglioramento dopo 6 mesi → indagini diagnostiche e consulto medico",
+          "CORTICOSTEROIDI: effetto positivo a breve termine ma negativo a lungo termine; il toolkit NON li raccomanda come prima scelta — discutere con il paziente",
+        ],
+      },
+      {
+        title: "Programma di Esercizi AAOS \u2014 Epicondilite Laterale e Mediale",
+        content: [
+          "FONTE: American Academy of Orthopaedic Surgeons \u2014 Therapeutic Exercise Program for Epicondylitis. \u26A0\uFE0F Programma di esercizi rivolto al paziente, da consegnare come programma domiciliare; non \u00E8 una linea guida con gradi di evidenza. Vale SIA per l'epicondilite laterale (gomito del tennista) SIA per quella mediale (gomito del golfista).",
+          "OBIETTIVO PRECOCE: promuovere l'ENDURANCE muscolare e migliorare la RESISTENZA ALLO STRESS RIPETITIVO.",
+          "\u2705 DURATA DEL PROGRAMMA: 6-12 SETTIMANE, salvo diversa indicazione. Dopo il recupero gli esercizi possono proseguire come programma di mantenimento.",
+          "\u26A0\uFE0F REGOLA SUL DOLORE: non si deve provare dolore durante l'esercizio, sebbene un certo grado di fastidio sia normale.",
+          "\u2500\u2500\u2500 STRETCHING \u2014 da eseguire pi\u00F9 volte al giorno \u2500\u2500\u2500",
+          "1. STRETCHING IN ESTENSIONE DI POLSO: braccio disteso, polso esteso come per fare segno di 'stop'. Con la mano opposta applicare pressione gentile sul palmo tirando verso di s\u00E9 fino a percepire l'allungamento sulla faccia INTERNA dell'avambraccio. Mantenere 15 SECONDI.",
+          "\u2705 DOSAGGIO: 5 ripetizioni, 4 VOLTE AL GIORNO, 5-7 giorni a settimana.",
+          "2. STRETCHING IN FLESSIONE DI POLSO: braccio disteso con palmo verso il basso, polso flesso con dita rivolte in basso. Tirare gentilmente la mano verso il corpo fino a percepire l'allungamento sulla faccia ESTERNA dell'avambraccio. Mantenere 15 SECONDI.",
+          "\u2705 DOSAGGIO: 5 ripetizioni, 4 VOLTE AL GIORNO, 5-7 giorni a settimana.",
+          "\u26A0\uFE0F Non bloccare il gomito in iperestensione durante gli stretching.",
+          "\u2192 Entrambi gli stretching vanno eseguiti nell'arco della giornata, SOPRATTUTTO PRIMA DELL'ATTIVIT\u00C0. Dopo il recupero vanno mantenuti come riscaldamento per le attivit\u00E0 che richiedono presa: giardinaggio, tennis, golf.",
+          "\u2500\u2500\u2500 RINFORZO \u2014 PROGRESSIONE A 3 STADI \u2500\u2500\u2500",
+          "PRINCIPIO DI PROGRESSIONE, valido per tutti gli esercizi di rinforzo: si inizia ogni stadio SENZA PESO. Quando si riescono a completare 30 RIPETIZIONI PER 2 GIORNI CONSECUTIVI SENZA AUMENTO DEL DOLORE, si avanza aumentando il peso (da 0.5 kg, poi 1 kg, fino a 1.5 kg).",
+          "I TRE STADI, comuni a tutti gli esercizi: STADIO 1 gomito flesso a 90\u00B0 con avambraccio appoggiato sul tavolo e polso al bordo | STADIO 2 gomito leggermente esteso, avambraccio ancora appoggiato | STADIO 3 gomito completamente esteso e braccio sollevato, NON pi\u00F9 appoggiato.",
+          "3. ESTENSIONE DI POLSO: palmo verso il basso, estendere il polso il pi\u00F9 possibile. Mantenere 1 tempo, ABBASSARE LENTAMENTE IN 3 TEMPI.",
+          "\u26A0\uFE0F NELLA FASE PRECOCE dell'epicondilite LATERALE dolorosa: eseguire SOLO LA FASE ECCENTRICA (l'abbassamento) con un manubrio leggero da 0.5-1.5 kg, aiutandosi con la mano opposta a sollevare il polso. Questo pu\u00F2 risolvere il dolore acuto prima di progredire al movimento completo.",
+          "\u2705 DOSAGGIO: 30 ripetizioni, 1 volta al giorno, 5-7 giorni a settimana.",
+          "4. FLESSIONE DI POLSO: palmo verso l'alto, flettere il polso il pi\u00F9 possibile. Mantenere 1 tempo, abbassare lentamente in 3 tempi.",
+          "\u26A0\uFE0F NELLA FASE PRECOCE dell'epicondilite MEDIALE dolorosa vale la stessa indicazione: solo fase eccentrica con carico leggero, prima di progredire al movimento completo.",
+          "\u2705 DOSAGGIO: 30 ripetizioni, 1 volta al giorno, 5-7 giorni a settimana.",
+          "5. SUPINAZIONE E PRONAZIONE DI AVAMBRACCIO: partire con il palmo di lato, ruotare lentamente il palmo verso l'alto, tornare lentamente alla partenza, poi ruotare lentamente il palmo verso il basso e tornare. Questo completa UNA ripetizione.",
+          "\u2705 DOSAGGIO: 30 ripetizioni, 1 volta al giorno, 5-7 giorni a settimana. Stessa progressione a 3 stadi e stesso criterio di incremento del carico.",
+          "\u2192 Con il manubrio, lasciare che il peso tiri l'avambraccio il pi\u00F9 possibile in entrambe le direzioni.",
+          "6. STRESS BALL SQUEEZE: da eseguire DOPO gli esercizi di rinforzo a stadi. La posizione di braccio e gomito deve corrispondere allo stadio che si sta completando.",
+          "\u2705 DOSAGGIO: 10 ripetizioni, 1 volta al giorno, 5-7 giorni a settimana.",
+          "7. FINGER STRETCH: 10 ripetizioni, 1 volta al giorno, 5-7 giorni a settimana.",
+          "\u2500\u2500\u2500 NOTA CLINICA \u2500\u2500\u2500",
+          "\u2192 La distinzione operativa tra le due forme sta nell'esercizio da cui partire in fase acuta: ECCENTRICA IN ESTENSIONE di polso per l'epicondilite laterale, ECCENTRICA IN FLESSIONE per quella mediale. Gli stretching e la progressione a stadi sono invece comuni."
+        ]
+      }
+    ],
+  },
+  // ---- LBP 2021 ----
+  {
+    id: 9,
+    category: "Rachide",
+    color: "#8B3A3A",
+    icon: "🔗",
+    title: "Lombalgia Acuta e Cronica — Interventi 2021",
+    source: "George et al. | JOSPT 2021;51(11):CPG1-CPG60 | APTA Orthopedics",
+    tags: ["lombalgia", "low back pain", "LBP", "rachide lombare", "manipolazione", "esercizio"],
+    summary: "Aggiornamento 2021 delle CPG APTA sugli interventi fisioterapici per la lombalgia acuta e cronica. Prima guida a includere dry needling, terapia cognitivo-funzionale e pain neuroscience education.",
+    sections: [
+      {
+        title: "Esercizio per LBP Acuta",
+        content: [
+          "PUÒ (C): esercizio per attivazione muscoli del tronco in LBP acuta senza irradiazione",
+          "PUÒ (C): rinforzo/endurance tronco + attivazione specifica tronco in LBP acuta CON dolore all'arto inferiore",
+          "PUÒ (C): Mechanical Diagnosis & Therapy (MDT) per ridurre dolore e disabilità in LBP acuta",
+          "PUÒ (C): Treatment-Based Classification (TBC) come sistema classificativo in LBP acuta",
+          "NON raccomandato: trazione meccanica per LBP acuta con dolore all'arto inferiore",
+        ],
+      },
+      {
+        title: "Esercizio per LBP Cronica",
+        content: [
+          "DEVE (A): programmi di esercizio — rinforzo/endurance tronco, esercizio multimodale, attivazione specifica tronco, aerobico, acquatico, esercizio generale",
+          "PUÒ (B): esercizio di controllo del movimento o di mobilità del tronco in LBP cronica",
+          "DEVE (A): attivazione specifica + controllo motorio per LBP cronica CON deficit di controllo del movimento",
+          "DEVE (A): esercizio generale per ridurre dolore e disabilità negli anziani con LBP cronica",
+          "PUÒ (B): esercizio specifico (attivazione tronco, controllo motorio) in LBP cronica CON dolore all'arto",
+          "PUÒ (C): esercizio generale post-chirurgia lombare",
+        ],
+      },
+      {
+        title: "Terapia Manuale e Terapie Dirette",
+        content: [
+          "DEVE (A): mobilizzazione/manipolazione thrust o non-thrust per ridurre dolore e disabilità in LBP ACUTA",
+          "PUÒ (B): massaggio o mobilizzazione tessuti molli per sollievo dolore a breve termine in LBP acuta",
+          "DEVE (A): mobilizzazione/manipolazione thrust o non-thrust per LBP CRONICA",
+          "PUÒ (B): mobilizzazione thrust o non-thrust per LBP cronica CON dolore all'arto",
+          "PUÒ (B): mobilizzazione tessuti molli/massaggio in combinazione con altri trattamenti per LBP cronica a breve termine",
+          "PUÒ (C): dry needling in combinazione con altri trattamenti per ridurre dolore/disabilità a breve termine in LBP cronica — NUOVO rispetto al 2012",
+          "PUÒ (B): mobilizzazione neurale in associazione con altri trattamenti per LBP cronica con dolore all'arto",
+          "NON DEVE: trazione meccanica per LBP cronica con dolore all'arto inferiore (nessun beneficio aggiuntivo)",
+        ],
+      },
+      {
+        title: "Educazione e Classificazione (LBP Cronica)",
+        content: [
+          "PUÒ (B): pain neuroscience education (PNE) in combinazione con terapia attiva — NON come trattamento stand-alone",
+          "PUÒ (B): yoga, stretching, Pilates, allenamento della forza come terapie attive complementari",
+          "PUÒ (B): MDT, stratificazione prognostica del rischio o classificazione patoanatomica in LBP cronica",
+          "PUÒ (C): terapia cognitivo-funzionale (CFT) per LBP cronica — NUOVO rispetto al 2012",
+          "NON raccomandato: PNE come trattamento isolato",
+        ],
+      },
+    ],
+  },
+  // ---- PFP 2019 ----
+  {
+    id: 10,
+    category: "Ginocchio",
+    color: "#0E6B5E",
+    icon: "🦵",
+    title: "Dolore Femoro-Rotuleo (PFP) — CPG 2019 + Progressione Carico Tendine Rotuleo",
+    source: "Willy et al. JOSPT 2019;49(9):CPG1-CPG95 | Scattone Silva et al. Med Sci Sports Exerc 2024;56(3):545-552 | Boyd MD – OrthoNY Protocol 2025",
+    pdfUrl: "https://www.orthony.com/wp-content/uploads/2025/09/Rehab-Patellofemoral-Pain-Syndrome.pdf",
+    tags: ["ginocchio", "patellofemoral", "PFP", "dolore anteriore ginocchio", "rotula", "tendinopatia rotulea", "carico tendineo", "progressione esercizi"],
+    summary: "Linee guida CPG 2019 per il dolore femoro-rotuleo, integrate con i dati biomeccanici di Scattone Silva et al. 2024 sulla progressione del carico sul tendine rotuleo durante 35 esercizi riabilitativi (3 tier di carico) e il protocollo riabilitativo OrthoNY 2025 (adottato da MGH Sports Medicine).",
+    sections: [
+      {
+        title: "Diagnosi e Classificazione",
+        content: [
+          "PFP: dolore insidioso, scarsamente localizzato, nella regione anteriore retro-rotulea/peri-rotulea",
+          "Aggravato da: squat, salire/scendere scale, corsa, salti, seduta prolungata",
+          "Fattori di rischio: debolezza muscolatura dell'anca, specializzazione precoce in uno sport, sesso femminile fisicamente attivo",
+          "Altezza, peso corporeo e postura del piede NON predicono lo sviluppo di PFP",
+          "Outcome measures: Kujala Anterior Knee Pain Scale, VAS, PSFS",
+          "Il PFP tipicamente non si risolve senza trattamento adeguato — incoraggiare la presa in carico",
+        ],
+      },
+      {
+        title: "Esercizio — Prima Linea (Grado A-B)",
+        content: [
+          "DEVE: esercizio terapeutico con rinforzo anca E ginocchio come approccio principale",
+          "Preferire esercizi per l'anca (rinforzo abduttori, rotatori esterni, estensori) nella FASE INIZIALE",
+          "La combinazione anca + ginocchio è superiore al solo rinforzo del ginocchio per ottimizzare i risultati",
+          "Esercizi in catena cinetica chiusa (squat) o aperta (estensione resistita) — entrambi validi per il quadricipite",
+          "NON indicato: biofeedback EMG del vasto mediale obliquo (VMO) per aumentare l'attivazione quadricipitale",
+          "NON indicato: biofeedback visivo sull'allineamento arto inferiore durante esercizio",
+        ],
+      },
+      {
+        title: "Ortesi, Taping e Calzature",
+        content: [
+          "PUÒ: taping rotuleo (patellar taping) nelle PRIME 4 settimane, in combinazione con esercizio, per riduzione immediata del dolore",
+          "ATTENZIONE: il taping non mantiene benefici a lungo termine e non modifica la prognosi se aggiunto a fisioterapia intensiva",
+          "NON raccomandato: taping per facilitare la funzione muscolare (muscle function taping)",
+          "NON DEVE: ortesi rotulee (bracciali, tutori, fasce rotulee) come trattamento per PFP",
+          "PUÒ: plantari (prefabbricati) in combinazione con esercizio per riduzione dolore a breve termine",
+          "PUÒ: rieducazione del pattern di corsa (gait retraining) per pazienti runner, con sessioni multiple per consolidare i cambiamenti",
+        ],
+      },
+      {
+        title: "Terapie Non Raccomandate",
+        content: [
+          "NON DEVE: dry needling per PFP (nessuna evidenza di beneficio)",
+          "NON raccomandata come prima linea: agopuntura (evidenza limitata, efficacia simile al placebo)",
+          "NON raccomandate: ultrasuoni, elettrostimolazione, manipolazione spinale per PFP",
+          "PUÒ: blood flow restriction (BFR) + esercizi ad alta ripetizione per pazienti con limitazione all'estensione resistita del ginocchio",
+          "NOTA: il PFP può persistere per anni — fondamentale la gestione a lungo termine con esercizio progressivo",
+        ],
+      },
+      {
+        title: "Progressione Carico Tendine Rotuleo — 3 Tier (Scattone Silva et al. 2024)",
+        content: [
+          "⚠️ NOTA: i dati seguenti provengono da uno studio biomeccanico sul tendine rotuleo (Scattone Silva et al. Med Sci Sports Exerc 2024;56(3):545-552), rilevante per PFP e tendinopatia rotulea, e per la progressione post-ricostruzione LCA con innesto osso-tendine-osso.",
+          "METODO: 35 esercizi riabilitativi valutati in 20 adulti sani con sistema motion capture + pedane di forza. Loading index calcolato su: picco di forza, loading rate e impulso cumulativo sul tendine rotuleo. Classificati in 3 tier (Tier 1 ≤0.33 | Tier 2 0.33–0.66 | Tier 3 ≥0.66).",
+          "─── TIER 1 — CARICO BASSO (loading index ≤0.33) — indicato nelle fasi iniziali/irritabili:",
+          "  • Step up 20 cm (0.187) — esercizio più sicuro e con carico minore",
+          "  • Squat bilaterale 60° (0.224)",
+          "  • Step down 20 cm (0.288)",
+          "  • Step up 30 cm (0.321)",
+          "─── TIER 2 — CARICO MODERATO (loading index 0.33–0.66) — progressione intermedia:",
+          "  • Bulgarian squat (0.406)",
+          "  • Squat monopodalico 60° (0.411)",
+          "  • Squat bilaterale completo (0.428)",
+          "  • Lunge (0.471)",
+          "  • Spanish squat (0.563)",
+          "  • Drop vertical jump bipodalico (0.563)",
+          "  • Single-leg drop vertical jump (0.599)",
+          "  • Squat monopodalico completo (0.580)",
+          "  • Countermovement jump bipodalico (0.610)",
+          "  • Corsa (0.612)",
+          "─── TIER 3 — CARICO ALTO (loading index ≥0.66) — fasi avanzate/ritorno allo sport:",
+          "  • Single-leg forward hop (0.666)",
+          "  • Single-leg countermovement jump (0.711)",
+          "  • Running cut (0.725)",
+          "  • Single-leg decline squat (0.747) — CARICO MASSIMO tra tutti gli esercizi testati",
+          "IMPLICAZIONE CLINICA: il single-leg decline squat (esercizio più prescritto per tendinopatia rotulea) rappresenta il carico maggiore → non adatto nelle fasi iniziali; progressione graduata da Tier 1 verso Tier 3 raccomandata.",
+          "IMPLICAZIONE POST-ACL: pazienti con innesto osso-tendine-osso hanno una 'tendinopatia iatrogena' al sito di prelievo → applicare questa progressione a 3 tier per il recupero del carico tendineo.",
+          "NESSUN tipo di contrazione è superiore (eccentrico = concentrico = isometrico) se il carico progressivo è garantito — la scelta dell'esercizio deve basarsi sul tier appropriato alla fase clinica.",
+        ],
+      },
+      {
+        title: "Protocollo Riabilitativo PFPS — 3 Fasi + Ritorno Corsa (Boyd MD / OrthoNY 2025)",
+        content: [
+          "FONTE: Evan D. Boyd MD, Knee/Shoulder/Sports Medicine — OrthoNY Rehabilitation Protocol 2025 (adottato da MGH Sports Medicine Physical Therapy). Link PDF disponibile nella guida.",
+          "DIAGNOSI CLINICA: dolore anteriore/retro-rotuleo; aggravato da seduta prolungata, squat, scale, corsa, salti; valutare catena cinetica dal rachide lombare al piede; test speciali: VMO Coordination Test, Patellar Apprehension, Clarke's Test, Eccentric Step Test, McConnell's Test, Patellar Tilt Test",
+          "FATTORI CONTRIBUENTI: malallineamento patellare, forze PF alterate, stress ripetitivo; valutare Q-angle, pronazione del piede, rotazione interna femorale, forza lumbopelvica",
+          "─── FASE I — ACUTA (0-2 Settimane) ───",
+          "OBIETTIVI: ridurre gonfiore e dolore; ripristinare mobilità rotulea e arto inferiore (anca e caviglia); ridurre inibizione muscolare; re-attivare quadricipite e controllo dell'anca; educazione del paziente (minimizzare fattori aggravanti: discese scale, seduta prolungata, corsa, salti)",
+          "INTERVENTI MANUALI: STM/IASTM; patellar taping (McConnell o kinesio); compressione ischemica/BFR; dry needling; neuromobilizzazione; mobilizzazione/manipolazione articolare",
+          "ROM/MOBILITÀ FASE I: cyclette a resistenza minima; stretching e foam rolling (flessori anca, hamstring, quadricipite, IT band, adduttori, rotatori anca, gastroc-soleo)",
+          "RINFORZO FASE I: isometrici quadricipite a 0°-45°-90° di flessione; SLR; bridge/bridge monopodal; clamshell laterale; abduzione anca lateral lying; core/lumbopelvic (TA, multifidus, plank front/side)",
+          "CRITERI PROGRESSIONE FASE I: ROM completo vs lato sano; contrazione quadricipite con glide superiore rotula e estensione attiva completa; SLR senza lag; tolleranza completa al carico in relativa estensione del ginocchio",
+          "─── FASE II — INTERMEDIA/SUBACUTA (2-4 Settimane) ───",
+          "OBIETTIVI: progressione a CKC/carico senza flessione del ginocchio sotto carico; mantenere ROM completo; tolleranza al rinforzo in CKC; autonomia in ADL e HEP avanzato",
+          "RINFORZO FASE II (continua Fase I): sumo walks; monster walks; hip drills 4 direzioni; BALANCE/PROPRIOCEZIONE: SLS (stance monopodal); clock taps; ball toss; correzione pattern motori nei task funzionali",
+          "CRITERI PROGRESSIONE FASE II: tolleranza alle attività in carico; ROM completo mantenuto; obiettivi di lunghezza muscolare raggiunti",
+          "─── FASE III — TARDIVA/CRONICA (4-6+ Settimane) ───",
+          "OBIETTIVI: mantenere ROM; promuovere pattern motori corretti; nessun dolore/gonfiore post-esercizio; forza completa; scale illimitate; tolleranza al carico in CKC con flessione, con controllo eccentrico; obiettivi funzionali raggiunti",
+          "RINFORZO FASE III (continua Fasi I-II): squat parziale → squat su sedia → wall slide → squat funzionale progressivo; lunge/reverse lunge; step-up; step-down eccentrico; correzione movimenti in task sport-specifici",
+          "CRITERI DIMISSIONE: autogestione indipendente dei sintomi; comprensione della condizione e delle strategie di prevenzione delle recidive; iniziare protocollo ritorno alla corsa",
+          "─── RITORNO ALLA CORSA — FASE I (Interval Running) ───",
+          "PREREQUISITO: >80% al Functional Assessment; nessun dolore o gonfiore durante le sessioni; warm-up 15 min cammino + cool-down 10 min cammino",
+          "Sett. 1: Camm. 5 min / Jog 1 min x 5 rip (x2 sessioni) → Camm. 4 min / Jog 2 min x 5 rip (x2 sessioni)",
+          "Sett. 2: Camm. 3 min / Jog 3 min x 5 rip (x2) → Camm. 2 min / Jog 4 min x 5 rip",
+          "Sett. 3: Camm. 2 min / Jog 4 min x 5 rip → Camm. 1 min / Jog 5 min x 5 rip (x2) → Ritorno alla corsa",
+          "─── RITORNO ALLA CORSA — FASE II (Continuous Running) ───",
+          "Sett. 1-2: 20→25 min; Sett. 3: 30→35 min; Sett. 4: 35→40 min; Sett. 5: 40→45 min; Sett. 6-7: 50→60 min; Sett. 8: 60 min",
+          "REGOLE: superfici morbide in Fase I; attività non ad impatto nei giorni di riposo; regola del 10% (max +10% km/settimana); aumentare distanza PRIMA di aumentare velocità",
+          "─── PROGRAMMA AGILITÀ E PLIOMETRIA ───",
+          "FASE I — PROGRESSIONE ANTERIORE: corsa avanti/indietro, lean-to-run, decelerazione 3 passi, figure 8, circolo, ladder; pliometria: shuttle press (bipodale → alternato → monopodal), salti su/da box, forward jumps, broad jump, tuck jumps, backward/forward hops",
+          "FASE II — PROGRESSIONE LATERALE: side shuffle, carioca, crossover steps, shuttle run, zig-zag, ladder; lateral jumps over cone, lateral tuck jumps, SL lateral jumps",
+          "FASE III — MULTIPLANARE: box drill, star drill, side shuffle con ostacoli, box jumps con cambio direzione, salti 90°-180°",
+          "CRITERI RITORNO ALLO SPORT: forza quad/HS/glut ≥90% controlaterale (isokinetic); H:Q ratio ≥70%; hop test ≥90% controlaterale; KOOS-sports >90%; IKDC soggettivo >93; PRRS (Psychological Readiness to Return to Sport)",
+        ],
+      },
+    ],
+  },
+  // ---- Plantar Fasciitis 2023 ----
+  {
+    id: 11,
+    category: "Piede e Caviglia",
+    color: "#1A6B5E",
+    icon: "🦶",
+    title: "Fascite Plantare / Heel Pain — Revisione 2023",
+    source: "Koc et al. | JOSPT 2023;53(12):CPG1-CPG39 | APTA Orthopedics | ChoosePT — Programma domiciliare APTA",
+    pdfUrl2: "https://www.choosept.com/health-tips/six-exercises-plantar-fasciitis-heel-pain",
+    tags: ["piede", "fascite plantare", "tallone", "heel pain", "plantar fasciitis"],
+    summary: "Revisione 2023 delle linee guida per il dolore al tallone e fascite plantare. Aggiornamento che integra oltre 100 nuovi studi con raccomandazioni su stretching, terapia manuale, ortesi, dry needling e splint notturni.",
+    sections: [
+      {
+        title: "Diagnosi e Valutazione",
+        content: [
+          "Dolore al tallone mediale plantare, tipicamente peggiore ai primi passi al mattino o dopo periodi di riposo",
+          "Diagnosi clinica: dolore alla palpazione dell'origine fasciale (inserzione calcaneare mediale)",
+          "Fattori di rischio: BMI elevato, ridotta dorsiflessione caviglia, stazione eretta prolungata, calzature inadeguate",
+          "Outcome measures: Foot Health Status Questionnaire (FHSQ), PSFS, VAS",
+          "Ecografia: utile per conferma diagnostica (ispessimento fascia > 4 mm) ma non necessaria di routine",
+          "Diagnosi differenziale: neuropatia del nervo calcaneare mediale, apofisiti (bambini/adolescenti), sindrome del tunnel tarsale, frattura da stress del calcagno",
+        ],
+      },
+      {
+        title: "Stretching ed Esercizio (Grado A-B)",
+        content: [
+          "DEVE (A): stretching specifico della fascia plantare + stretching gastrocnemio/soleo per riduzione dolore a breve e lungo termine",
+          "DEVE (A): programmi di rinforzo progressivo, heavy-load training supervisionato e fisioterapia multimodale",
+          "Evidenza supporta: riabilitazione supervisionata, esercizi combinati (educazione + terapia manuale + stretching + rinforzo + interventi neurodynamici)",
+          "NON indicato: ultrasuoni terapeutici per potenziare l'effetto dello stretching",
+        ],
+      },
+      {
+        title: "Terapia Manuale (Grado A-B)",
+        content: [
+          "DEVE (A): terapia manuale diretta a articolazioni e strutture dei tessuti molli dell'arto inferiore per ridurre restrizioni, dolore e migliorare funzione",
+          "La terapia manuale come tecnica singola ha evidenza insufficiente — preferire in combinazione con altre terapie",
+          "Tecniche evidenziate: mobilizzazione astragalo-tibiale, mobilizzazione sottoastragalica, manipolazione del piede/caviglia",
+        ],
+      },
+      {
+        title: "Ortesi, Taping e Presidi (Grado A-B)",
+        content: [
+          "DEVE (A): plantari (prefabbricati o su misura) per supporto arco longitudinale mediale e cushioning del tallone — riduzione dolore da 2 settimane a medio termine",
+          "DEVE (A): foot taping (rigido o elastico) in combinazione con altri trattamenti per miglioramenti a breve termine di dolore e funzione",
+          "PUÒ (B): splint notturni per pazienti con dolore intenso ai primi passi mattutini — riduzione sintomi a breve termine",
+          "Dry needling (Grado B): nei trigger points di gastrocnemio, soleo e muscoli plantari per riduzione dolore a breve/lungo termine e miglioramento funzionale",
+          "PUÒ (B): shockwave terapia extracorporea (ESWT) come opzione aggiuntiva per casi refrattari",
+          "PUÒ: laser terapia di basso livello, fonoforesi come adjunct — evidenza moderata",
+        ],
+      },
+      {
+        title: "Programma Domiciliare in 6 Esercizi (ChoosePT \u2014 APTA)",
+        content: [
+          "FONTE: ChoosePT, American Physical Therapy Association \u2014 Six Exercises for Plantar Fasciitis and Heel Pain (autore Kelly Coleman PT DPT, revisione esperta James E. Zachazewski PT DPT, marzo 2024). \u26A0\uFE0F Materiale divulgativo rivolto ai pazienti, non una linea guida con gradi di evidenza: utile come programma domiciliare da consegnare, da integrare nel piano di trattamento e non da sostituire ad esso.",
+          "COSA COMPRENDE IL TRATTAMENTO FISIOTERAPICO secondo il documento: valutazione del cammino e gait training; istruzioni su quando applicare il ghiaccio per dolore e infiammazione; taping temporaneo del piede per sollievo a breve termine; indicazione di plantari, calzature di supporto o splint notturno; insegnamento di esercizi specifici di stretching e rinforzo.",
+          "\u2500\u2500\u2500 1. MASSAGGIO DELLA FASCIA PLANTARE \u2500\u2500\u2500",
+          "Seduto o in piedi con un piede appoggiato su una pallina o su una bottiglia d'acqua congelata; la bottiglia congelata aggiunge l'effetto del freddo sull'infiammazione.",
+          "Rotolare lentamente avanti e indietro sotto il piede, partendo appena sotto la testa dei metatarsi e terminando appena prima del calcagno.",
+          "DOSAGGIO: 10 rotolamenti lenti per piede, 2 serie per piede, una volta al giorno.",
+          "\u26A0\uFE0F Non deve comparire dolore: la pressione va dosata fino a percepire un allungamento gentile, non oltre.",
+          "\u2500\u2500\u2500 2. HEEL RAISE DAL GRADINO \u2500\u2500\u2500",
+          "In piedi con l'avampiede sul bordo dell'ultimo gradino e i talloni sospesi nel vuoto.",
+          "Abbassare lentamente i talloni sotto il livello del gradino fino a percepire l'allungamento del polpaccio, poi risalire lentamente sull'avampiede.",
+          "DOSAGGIO: 10 ripetizioni, pausa, 2 serie complessive, una volta al giorno.",
+          "\u26A0\uFE0F Movimento lento e controllato; mantenere l'equilibrio reggendosi al corrimano o a un altro supporto se necessario.",
+          "\u2500\u2500\u2500 3. INVERSIONE DI CAVIGLIA CON ELASTICO (seduto a terra) \u2500\u2500\u2500",
+          "Seduto a terra con la schiena eretta e le gambe distese in avanti. Accavallare una gamba sull'altra, con l'elastico fissato attorno al piede superiore e passante sotto il piede inferiore; l'estremit\u00E0 dell'elastico resta in mano.",
+          "Allontanare lentamente il piede superiore da quello inferiore ruotando la caviglia verso l'interno, poi tornare lentamente alla posizione di partenza.",
+          "DOSAGGIO: 10 ripetizioni, 2 serie per piede, una volta al giorno.",
+          "\u26A0\uFE0F Evitare qualsiasi movimento dell'anca durante l'esercizio: il lavoro deve restare alla caviglia.",
+          "\u2500\u2500\u2500 4. TOE TOWEL SCRUNCHES (raccolta dell'asciugamano con le dita) \u2500\u2500\u2500",
+          "In piedi o seduto con la schiena eretta, un piede appoggiato su un asciugamano e le dita divaricate.",
+          "Flettere le dita per raccogliere l'asciugamano e tirarlo verso di s\u00E9.",
+          "DOSAGGIO: 10-15 raccolte, 2 serie per piede, da una a tre volte al giorno.",
+          "PROGRESSIONE: quando l'esercizio diventa facile, appoggiare un piccolo peso (circa 1-2 kg) all'estremit\u00E0 opposta dell'asciugamano.",
+          "\u26A0\uFE0F Tutto il piede deve restare a terra: solo le dita eseguono il movimento.",
+          "\u2500\u2500\u2500 5. STRETCHING SPECIFICO DELLA FASCIA PLANTARE (seduto) \u2500\u2500\u2500",
+          "Seduto su una sedia, accavallare una gamba sull'altra portando la caviglia sopra il ginocchio controlaterale.",
+          "Con una mano che tiene la caviglia e l'altra le dita del piede, tirare gentilmente le dita all'indietro fino a percepire l'allungamento sotto la pianta.",
+          "DOSAGGIO: mantenere 20 secondi, 3 ripetizioni per ciascun piede, una volta al giorno.",
+          "\u26A0\uFE0F Movimento lento e controllato.",
+          "\u2500\u2500\u2500 6. STRETCHING DEL POLPACCIO AL MURO \u2500\u2500\u2500",
+          "In piedi di fronte al muro alla distanza di un braccio, mani appoggiate sulla parete.",
+          "Mantenendo entrambi i piedi piatti a terra, estendere una gamba indietro e flettere quella anteriore fino a percepire l'allungamento nel polpaccio della gamba posteriore.",
+          "DOSAGGIO: mantenere 20 secondi, 3 ripetizioni per ciascuna gamba, una volta al giorno.",
+          "\u2500\u2500\u2500 QUANDO RIVOLGERSI AL FISIOTERAPISTA \u2500\u2500\u2500",
+          "Se il dolore al tallone non migliora dopo una o due settimane, oppure se tende a ripresentarsi, serve un programma personalizzato: il fisioterapista identifica i fattori che sostengono la fascite, guida la progressione degli esercizi e imposta la prevenzione delle recidive.",
+          "\u2500\u2500\u2500 RIFERIMENTI CITATI NEL DOCUMENTO \u2500\u2500\u2500",
+          "Thong-On S, et al. Effects of strengthening and stretching exercises on the temporospatial gait parameters in patients with plantar fasciitis: a randomized controlled trial. Ann Rehabil Med. 2019;43(6):662-676.",
+          "Caratun R, Rutkowski NA, Finestone HM. Stubborn heel pain: treatment of plantar fasciitis using high-load strength training. Can Fam Physician. 2018;64(1):44-46.",
+          "Fraser JJ, Glaviano NR, Hertel J. Utilization of physical therapy intervention among patients with plantar fasciitis in the United States. J Orthop Sports Phys Ther. 2017;47(2):49-55.",
+          "Digiovanni BF, Nawoczenski DA, Malay DP, et al. Plantar fascia-specific stretching exercise improves outcomes in patients with chronic plantar fasciitis: a prospective clinical trial with two-year follow-up. J Bone Joint Surg Am. 2006;88(8):1775-1781."
+        ]
+      },
+    ],
+  },
+  // ---- Achilles 2024 ----
+  {
+    id: 12,
+    category: "Piede e Caviglia",
+    color: "#1A6B5E",
+    icon: "🦶",
+    title: "Tendinopatia Achillea (Porzione Mediana) — Revisione 2024",
+    source: "Chimenti et al. | JOSPT 2024;54(12):CPG1-CPG32 | APTA Orthopedics | Baxter et al. Med Sci Sports Exerc 2021;53(1):124-130",
+    pdfUrl: "https://pubmed.ncbi.nlm.nih.gov/32658037/",
+    tags: ["achille", "tendinopatia", "tendine", "piede", "Achilles tendinopathy"],
+    summary: "Terza revisione delle CPG APTA sulla tendinopatia della porzione mediana del tendine d'Achille. Il carico tendineo progressivo rimane il trattamento cardine, esteso ora a modalità isometrica, isotonica e pliometrica.",
+    sections: [
+      {
+        title: "Diagnosi e Classificazione",
+        content: [
+          "Dolore alla porzione mediana del tendine d'Achille (2-7 cm dall'inserzione calcaneare), rigidità e deficit di forza",
+          "Segni clinici: Arc Sign positivo (dolore si sposta con la dorsiflessione), Royal London Hospital Test positivo",
+          "VISA-A score: strumento di outcome validato per tendinopatia achillea (0-100)",
+          "Imaging: ecografia come prima scelta (ispessimento, neovascolarizzazione); RMN per casi complessi o sospetta rottura parziale",
+          "Diagnosi differenziale: borsite retrocalcaneare, tendinopatia inserzionale, tendinosi parategumentosa, rottura parziale",
+          "Fattori di rischio: improvviso aumento del volume di allenamento, scarso riposo, rigidità caviglia, BMI elevato, utilizzo di fluorochinoloni",
+        ],
+      },
+      {
+        title: "Carico Tendineo — Trattamento Cardine (Grado A)",
+        content: [
+          "DEVE (A — prima linea): programma di carico tendineo progressivo per ridurre dolore e migliorare funzione",
+          "Il termine 'carico tendineo' include: esercizio eccentrico, concentrico, isometrico, isotnico, heavy slow resistance (HSR) e pliometrico dei flessori plantari",
+          "Esercitarsi almeno 3 volte/settimana, alla massima intensità tollerata dal paziente",
+          "NOVITÀ 2024: il programma NON è limitato al solo eccentrico — protocolli HSR (concentric/eccentric) e isometrico ugualmente supportati",
+          "Miglioramenti clinicamente significativi al VISA-A già a 2 settimane; picco attorno a 12 settimane (~18-21 punti)",
+          "Controindicazioni relative al carico pesante: fragilità tendinea presunta (uso steroidi sistemici, storia fluorochinoloni, disfunzione metabolica grave)",
+        ],
+      },
+      {
+        title: "Terapie Fisiche Adiuvanti (Grado B-C)",
+        content: [
+          "PUÒ (B): shockwave terapia extracorporea (ESWT) come aggiunta al programma di carico eccentrico in pazienti refrattari",
+          "PUÒ (B): dry needling nei trigger points del gastrocnemio/soleo per riduzione dolore",
+          "PUÒ (B): laser terapia di basso livello (LLLT) in associazione con esercizio",
+          "PUÒ (C): taping (kinesio tape) per riduzione dolore a breve termine durante attività funzionali",
+          "PUÒ (C): splint notturni per ridurre la rigidità mattutina",
+          "NON DEVE (A): ultrasuoni terapeutici come trattamento isolato — nessun beneficio dimostrato",
+        ],
+      },
+      {
+        title: "Interventi da Evitare / Non Raccomandati",
+        content: [
+          "NON RACCOMANDATO: iniezioni di corticosteroidi — rischio di danno strutturale al tendine e aumento del rischio di rottura",
+          "NON DEVE essere trattamento di prima linea: iniezioni PRP — evidenza non superiore al placebo (RCT Kearney 2021)",
+          "NON indicata: trazione meccanica per tendinopatia achillea",
+          "ATTENZIONE: terapia passiva isolata (massaggio, ultrasuoni, elettrostimolazione) senza programma di carico — insufficiente come trattamento primario",
+          "Approach 'wait-and-see' inferiore all'esercizio di carico progressivo in 3 sistematic reviews",
+        ],
+      },
+      {
+        title: "Progressione del Carico sul Tendine d'Achille \u2014 4 Tier (Baxter et al. 2021)",
+        content: [
+          "FONTE: Baxter JR, Corrigan P, Hullfish TJ, O'Rourke P, Silbernagel KG. Exercise progression to incrementally load the Achilles tendon. Med Sci Sports Exerc. 2021;53(1):124-130. doi:10.1249/MSS.0000000000002459",
+          "METODO: 8 adulti sani hanno eseguito 30 esercizi riabilitativi con motion capture 3D e pedane di forza. Per ciascun esercizio \u00E8 stato calcolato un loading index combinando picco di carico (peso 50%), impulso di carico (30%) e loading rate (20%), normalizzati sui rispettivi valori massimi. Tier 1 <0.25 | Tier 2 0.25-0.50 | Tier 3 0.50-0.75 | Tier 4 >0.75.",
+          "RANGE COMPLESSIVO: il carico di picco varia di oltre 12 volte, da 0.5 pesi corporei nel calf raise seduto bipodalico a 7.3 pesi corporei nell'hop monopodalico in avanti.",
+          "\u2500\u2500\u2500 TIER 1 \u2014 CARICO MINIMO (loading index <0.25) \u2500\u2500\u2500",
+          "Calf raise seduto bipodalico \u2014 index 0.100 | picco 0.5 BW | impulso 0.6 BW\u00B7s | rate 2.7 BW/s",
+          "Calf raise seduto monopodalico \u2014 index 0.128 | picco 0.7 BW | impulso 0.7 BW\u00B7s | rate 3.6 BW/s",
+          "Squat \u2014 index 0.167 | picco 1.1 BW | impulso 0.8 BW\u00B7s | rate 4.0 BW/s",
+          "Step up basso, arto guida \u2014 index 0.213 | picco 1.6 BW | impulso 0.7 BW\u00B7s | rate 10.1 BW/s",
+          "Step up alto, arto guida \u2014 index 0.241 | picco 1.8 BW | impulso 0.8 BW\u00B7s | rate 11.4 BW/s",
+          "Calf raise in piedi bipodalico \u2014 index 0.248 | picco 1.6 BW | impulso 1.2 BW\u00B7s | rate 8.7 BW/s",
+          "\u2500\u2500\u2500 TIER 2 \u2014 CARICO MODERATO (0.25-0.50) \u2500\u2500\u2500",
+          "Calf raise rimbalzante bipodalico \u2014 index 0.282 | picco 2.5 BW | impulso 0.5 BW\u00B7s | rate 19.9 BW/s",
+          "Affondo, arto anteriore \u2014 index 0.285 | picco 2.1 BW | impulso 1.2 BW\u00B7s | rate 8.4 BW/s",
+          "Step down basso, arto guida \u2014 index 0.310 | picco 2.2 BW | impulso 0.9 BW\u00B7s | rate 22.9 BW/s",
+          "Step up basso, arto posteriore \u2014 index 0.341 | picco 2.9 BW | impulso 1.1 BW\u00B7s | rate 14.2 BW/s",
+          "Step down alto, arto posteriore \u2014 index 0.342 | picco 2.6 BW | impulso 1.2 BW\u00B7s | rate 16.6 BW/s",
+          "CAMMINO (fase di appoggio) \u2014 index 0.359 | picco 3.3 BW | impulso 0.8 BW\u00B7s | rate 18.7 BW/s",
+          "Step down basso, arto posteriore \u2014 index 0.369 | picco 2.9 BW | impulso 1.3 BW\u00B7s | rate 15.1 BW/s",
+          "Salto in avanti bipodalico \u2014 index 0.414 | picco 3.2 BW | impulso 1.2 BW\u00B7s | rate 25.4 BW/s",
+          "Step down alto, arto guida \u2014 index 0.429 | picco 3.2 BW | impulso 1.1 BW\u00B7s | rate 34.2 BW/s",
+          "Step up alto, arto posteriore \u2014 index 0.432 | picco 3.7 BW | impulso 1.1 BW\u00B7s | rate 22.1 BW/s",
+          "Affondo, arto posteriore \u2014 index 0.435 | picco 2.4 BW | impulso 2.4 BW\u00B7s | rate 11.5 BW/s",
+          "Countermovement jump bipodalico \u2014 index 0.474 | picco 3.4 BW | impulso 1.5 BW\u00B7s | rate 32.5 BW/s",
+          "Calf raise rimbalzante monopodalico \u2014 index 0.476 | picco 4.2 BW | impulso 1.1 BW\u00B7s | rate 26.2 BW/s",
+          "Calf raise in piedi monopodalico \u2014 index 0.493 | picco 3.0 BW | impulso 2.5 BW\u00B7s | rate 13.1 BW/s",
+          "\u2500\u2500\u2500 TIER 3 \u2014 CARICO ELEVATO (0.50-0.75) \u2500\u2500\u2500",
+          "Drop jump bipodalico \u2014 index 0.519 | picco 3.6 BW | impulso 1.7 BW\u00B7s | rate 34.4 BW/s",
+          "Hopping sul posto bipodalico \u2014 index 0.555 | picco 4.8 BW | impulso 0.6 BW\u00B7s | rate 56.3 BW/s",
+          "CORSA (fase di appoggio) \u2014 index 0.600 | picco 5.2 BW | impulso 0.7 BW\u00B7s | rate 58.1 BW/s",
+          "Hopping in avanti bipodalico \u2014 index 0.656 | picco 5.2 BW | impulso 1.3 BW\u00B7s | rate 58.4 BW/s",
+          "Countermovement jump monopodalico \u2014 index 0.705 | picco 4.9 BW | impulso 2.4 BW\u00B7s | rate 46.2 BW/s",
+          "Salto in avanti monopodalico \u2014 index 0.740 | picco 5.4 BW | impulso 2.3 BW\u00B7s | rate 46.9 BW/s",
+          "\u2500\u2500\u2500 TIER 4 \u2014 CARICO MASSIMO (>0.75) \u2500\u2500\u2500",
+          "Hopping sul posto monopodalico \u2014 index 0.764 | picco 6.7 BW | impulso 1.3 BW\u00B7s | rate 62.1 BW/s",
+          "Drop jump monopodalico \u2014 index 0.852 | picco 5.5 BW | impulso 3.0 BW\u00B7s | rate 59.2 BW/s",
+          "Hopping laterale monopodalico \u2014 index 0.904 | picco 7.3 BW | impulso 2.1 BW\u00B7s | rate 67.7 BW/s",
+          "Hopping in avanti monopodalico \u2014 index 0.924 | picco 7.3 BW | impulso 2.3 BW\u00B7s | rate 67.1 BW/s \u2014 CARICO MASSIMO tra tutti gli esercizi testati",
+          "\u2500\u2500\u2500 DUE PROGRESSIONI PARALLELE \u2500\u2500\u2500",
+          "MOVIMENTI ISOLATI DI CAVIGLIA: calf raise seduto (tier 1) \u2192 calf raise monopodalico (tier 2) \u2192 hopping bipodalico (tier 3) \u2192 hop monopodalico in avanti (tier 4).",
+          "MOVIMENTI MULTIARTICOLARI: squat (tier 1) \u2192 step up o step down (tier 2) \u2192 countermovement jump monopodalico (tier 3) \u2192 drop jump monopodalico (tier 4).",
+          "Le due progressioni sono equivalenti come carico: si sceglie in base alle preferenze e ai vincoli del paziente mantenendo gli stessi obiettivi di carico sul tendine.",
+          "\u2500\u2500\u2500 IMPLICAZIONI CLINICHE \u2500\u2500\u2500",
+          "CAMMINO E CORSA COME PIETRE MILIARI: cammino e corsa hanno un proprio loading index (0.359 e 0.600) e servono da riferimento clinico. Se il paziente cammina senza problemi, tollera gli esercizi di tier 1 e i tier 2 pi\u00F9 bassi; quando corre in sicurezza, pu\u00F2 eseguire anche calf raise monopodalici e drop jump bipodalici.",
+          "\u26A0\uFE0F I SOLI CALF RAISE NON BASTANO: il calf raise seduto carica 0.5-0.7 BW mentre la corsa arriva a 5.2 BW e l'hop monopodalico a 7.3. Un programma fermo ai soli calf raise non prepara il tendine alle richieste del ritorno alla corsa.",
+          "MOVIMENTI ASIMMETRICI: nell'affondo l'arto posteriore riceve un carico superiore del 52% rispetto all'anteriore (0.435 contro 0.285), soprattutto per il maggior tempo sotto carico. Nello step up l'arto posteriore \u00E8 sempre pi\u00F9 caricato dell'arto guida, a qualsiasi altezza del gradino. Negli step down non emergono differenze chiare. Questo permette di dosare il carico lato per lato.",
+          "ECCENTRICO NON SUPERIORE AL CONCENTRICO: nelle fasi concentrica ed eccentrica dell'hopping monopodalico picchi e impulsi risultano molto simili. Gli autori ipotizzano che il meccanismo determinante per il recupero tendineo non sia l'eccentrico in s\u00E9 ma l'impulso di carico, concetto analogo al 'tempo sotto tensione'.",
+          "PERSONALIZZAZIONE SECONDO LA PATOLOGIA: dopo rottura del tendine d'Achille il parametro da sorvegliare \u00E8 soprattutto il loading rate, per evitare la ri-rottura; nella tendinopatia, invece, massimizzare l'impulso di carico pu\u00F2 essere il fattore critico per stimolare il rimodellamento.",
+          "LIMITI DELLO STUDIO: campione di 8 soggetti sani e giovani, senza storia di lesione achillea; il carico tendineo \u00E8 stato stimato dividendo il momento di flessione plantare per un braccio di leva costante di 5 cm, non misurato direttamente; i fattori di ponderazione del loading index derivano dall'esperienza clinica degli autori e sono modificabili."
+        ]
+      },
+    ],
+  },
+  {
+    id: 17,
+    category: "Ginocchio",
+    color: "#0E6B5E",
+    icon: "🦵",
+    title: "Riabilitazione Post-Ricostruzione LCA (ACLR) — CPG Aspetar 2023",
+    source: "Kotsifaki et al. | Br J Sports Med 2023;57(9):500-520 | Aspetar Hospital, Doha | AGREE II + GRADE",
+    pdfUrl: "https://bjsm.bmj.com/content/57/9/500",
+    tags: ["ginocchio", "LCA", "ACL", "ricostruzione", "riabilitazione", "ritorno allo sport", "RTS", "esercizio"],
+    summary: "Linea guida clinica Aspetar per la riabilitazione dopo ricostruzione del legamento crociato anteriore (ACLR). Basata su 140 RCT e 5231 pazienti. Copre fasi riabilitative, modalità fisiche, esercizio, criteri di ritorno alla corsa e allo sport. Approccio accelerato precoce raccomandato.",
+    sections: [
+      {
+        title: "Timing e Struttura della Riabilitazione",
+        content: [
+          "RIABILITAZIONE PREOPERATORIA (consigliata): può migliorare ROM e forza del quadricipite a 3 mesi post-op (effect size moderato); può ridurre il tempo al ritorno all'attività prelesionale; almeno 1 visita raccomandata per verificare attivazione volontaria del quadricipite, assenza di contrattura in flessione e per educare il paziente",
+          "RIABILITAZIONE NON SUPERVISIONATA: accettabile per pazienti motivati senza accesso alla fisioterapia — i programmi devono essere comunque individualizzati, prescritti e monitorati",
+          "DURATA: individuale e basata su criteri — non su tempistiche fisse; protocollo accelerato (19 settimane) non inferiore a protocolli più lunghi per lassità, forza e funzione soggettiva",
+          "PRINCIPIO CARDINE: progressione basata su criteri oggettivi + requisiti minimi di tempo per la guarigione del graft",
+        ],
+      },
+      {
+        title: "Modalità Fisiche — Fase Precoce",
+        content: [
+          "CRIOTERAPIA (raccomandata): riduce uso di farmaci, dolore soggettivo e migliora soddisfazione nelle prime 3 giorni post-op; crioterapia compressiva più efficace della sola crioterapia; applicare con cautela per evitare ustioni da freddo",
+          "NMES — Neuromuscular Electrical Stimulation (raccomandata): aggiunta alla riabilitazione standard → miglioramento moderato della forza del quadricipite; riduzione significativa del gonfiore articolare nelle fasi precoce e intermedia; usare anche durante attività funzionali nella fase precoce per facilitare i guadagni di forza",
+          "BFR — Blood Flow Restriction a basso carico (considerare): può migliorare forza quadricipite e femorali, prevenire atrofia disusale in fase precoce; attenzione alle controindicazioni (malattie cardiovascolari, edema esteso, irritazione cutanea)",
+          "CPM — Continuous Passive Motion: NON raccomandata — non superiore al movimento attivo per ROM, dolore e gonfiore; aggiunge costi e tempi",
+          "KINESIO TAPE: effetto terapeutico probabile minimo o nullo — basso costo e nessun evento avverso, ma non raccomandato routinariamente",
+          "DRY NEEDLING al vastus medialis nella fase precoce: NON raccomandato — 14% di rischio di ematomi; dolore significativo nell'ora post-intervento",
+          "WHOLE-BODY VIBRATION: può essere aggiunto per migliorare forza quadricipite e balance statico, ma NON può sostituire la riabilitazione convenzionale",
+        ],
+      },
+      {
+        title: "Esercizio — Iniziazione e Progressione",
+        content: [
+          "MOBILIZZAZIONE ARTICOLARE ATTIVA: iniziare immediatamente dopo l'intervento — l'immobilizzazione non riduce il dolore e causa atrofia che rallenta il recupero",
+          "CARICO PRECOCE (prima settimana): progressivo e controllato secondo tolleranza del paziente e indicazioni chirurgiche",
+          "ESERCIZI ISOMETRICI (prime 2 settimane): contrazioni statiche del quadricipite e SLR sicuri e possono accelerare il recupero del ROM senza compromettere il graft",
+          "OKC — Open Kinetic Chain (dalla 4a settimana): ROM limitato 90°-45° di flessione; nessuna differenza in lassità rispetto a OKC tardiva (12 settimane); monitorare dolore anteriore al ginocchio; grafi HS più vulnerabili rispetto al BTB all'OKC precoce",
+          "LEG PRESS (dalla 3a settimana, graft HS): 0°-45° — migliora funzione soggettiva e outcomes funzionali; monitorare dolore anteriore",
+          "ECCENTRICO su cyclette/stepper (dalla 3a settimana): tra 20°-60° di flessione — maggiori guadagni di forza e ipertrofia del quadricipite rispetto all'inizio a 12 settimane; effetti persitenti a 1 anno",
+          "COMBINAZIONE CKC + OKC: significativamente migliore per forza del quadricipite e ritorno allo sport rispetto a solo CKC",
+        ],
+      },
+      {
+        title: "Rinforzo, Controllo Motorio e Training Avanzato",
+        content: [
+          "FORZA + CONTROLLO MOTORIO: entrambi indispensabili e complementari — il controllo motorio non può sostituire il rinforzo e viceversa",
+          "ECCENTRICO + CONCENTRICO: combinare per ottimizzare forza e outcomes funzionali; eccentric overload non superiore al training convenzionale per i guadagni di forza del quadricipite",
+          "ISOTONIC vs ISOKINETIC: il programma combinato isotonic+isokinetic ottiene i migliori risultati di forza; l'isokinetic esclusivo non è raccomandato come unica modalità di rinforzo",
+          "PLIOMETRICO + AGILITÀ (fase avanzata): migliora funzione soggettiva e outcomes funzionali rispetto alla cura standard; la combinazione eccentrico+pliometrico è più efficace delle singole componenti per balance, funzione e prontezza psicologica",
+          "CORE STABILITY: aggiunta alla riabilitazione standard → migliora andatura, funzione soggettiva e ROM; includere nel protocollo",
+          "TERAPIA ACQUATICA: avviare 3-4 settimane post-op (dopo cicatrizzazione completa); migliora funzione soggettiva nella fase precoce; nessuna differenza rispetto al programma a terra nelle fasi successive",
+        ],
+      },
+      {
+        title: "Ritorno alla Corsa e allo Sport — Criteri Aspetar",
+        content: [
+          "RITORNO ALLA GUIDA: non prima di poter attivare il freno in sicurezza in un'emergenza simulata — circa 4-6 settimane per ACLR destro, 2-3 settimane per sinistro",
+          "CRITERI PER RITORNO ALLA CORSA: ROM flessione ≥95%, full extension ROM, no versamento (o traccia), LSI quadricipite >80%, LSI impulso eccentrico CMJ >80%, jogging in acqua e Alter-G senza dolore, single-leg hopping ('pogos') senza dolore",
+          "CRITERI PER RITORNO ALLO SPORT (professionisti): assenza dolore e gonfiore, ROM completo, ginocchio stabile (pivot shift, Lachman, lassimetro), funzione soggettiva e prontezza psicologica normalizzate (IKDC, ACL-RSI, Tampa Scale)",
+          "FORZA: picco di coppia isokinetic quadricipite e femorali a 60°/s con 100% di simmetria (per sport pivoting ad alto impatto); ripristinare almeno i valori assoluti pre-operatori",
+          "SALTI: CMJ e drop jump >90% simmetria in altezza e impulso concentrico/eccentrico; RSI (altezza/tempo) >1.3 bilaterale, >0.5 monopodal per sport di campo",
+          "BIOMECCANICA: normalizzare simmetria (>90%) per forze di reazione al suolo verticali e biomeccanica del ginocchio in salto verticale/orizzontale e durante corsa ad alta velocità + cambi di direzione",
+          "IMPORTANTE: clearance dal centro clinico ≠ ritorno alla competizione — necessaria fase di transizione con progressiva esposizione allo sport prima del ritorno unrestricted",
+        ],
+      },
+    ],
+  },
+  {
+    id: 18,
+    category: "Ginocchio",
+    color: "#0E6B5E",
+    icon: "🦵",
+    title: "Gestione della Patologia Meniscale Acuta Isolata — CPG AAOS 2024",
+    source: "AAOS Clinical Practice Guideline | Luglio 2024 | www.aaos.org/ampcpg",
+    pdfUrl: "https://www.aaos.org/ampcpg",
+    tags: ["ginocchio", "menisco", "lesione meniscale", "meniscectomia", "riparazione meniscale", "MRI", "McMurray", "Thessaly"],
+    summary: "Linea guida AAOS 2024 per la diagnosi e il trattamento della lesione meniscale acuta isolata (escluse lesioni degenerative e associate a rottura LCA). Include indicazioni diagnostiche (MRI, esame clinico), trattamento conservativo e chirurgico, e timing della chirurgia.",
+    sections: [
+      {
+        title: "Diagnosi — Imaging e Esame Clinico",
+        content: [
+          "MRI (Raccomandazione FORTE): è la modalità di imaging preferita per la diagnosi di lesione meniscale acuta — alta accuratezza diagnostica; la TC artrogra o l'ecografia possono essere utilizzate quando la RMN non è disponibile o controindicata",
+          "ESAME FISICO (Raccomandazione MODERATA): la combinazione di più test clinici aumenta l'accuratezza diagnostica rispetto ai singoli test",
+          "TEST RACCOMANDATI: dolore alla palpazione della rima articolare (joint line tenderness) + McMurray Test (rotazione con flessione) + Thessaly Test (rotazione in monopodalismo a 20°) — combinazione preferibile",
+          "POPOLAZIONE TARGET: pazienti giovani e attivi (spesso atleti liceo/università) con lesione traumatica acuta da rotazione-flessione o impatto diretto; ESCLUSI: lesioni croniche/degenerative, lesioni associate a rottura del LCA",
+          "IMPATTO: le lesioni meniscali acute possono avere significativo impatto fisico ed emotivo; ritorno allo sport post-chirurgico: 4-7 mesi",
+        ],
+      },
+      {
+        title: "Trattamento Chirurgico — Principi e Indicazioni",
+        content: [
+          "PRESERVAZIONE MENISCALE (Raccomandazione MODERATA): quando indicata la chirurgia, deve essere preservato quanto più possibile il tessuto meniscale funzionale per ridurre il rischio di osteoartrite",
+          "LESIONI DISPLACCATE O DISPLACANTI (Consenso): lesioni che limitano il ROM → beneficio dalla chirurgia acuta; non attendere",
+          "TIMING OTTIMALE (opzione — evidenza limitata): pazienti con fallimento del trattamento conservativo che intervengono entro 6 mesi dall'infortunio hanno outcomes migliori rispetto all'intervento tardivo",
+          "RIPARAZIONE vs MENISCECTOMIA PARZIALE (opzione — evidenza limitata): la riparazione meniscale migliora gli outcomes rispetto alla meniscectomia parziale nelle lesioni acute con potenziale di guarigione — favorire sempre la riparazione quando possibile",
+          "CANDIDATURA ALLA RIPARAZIONE (consenso): pazienti con lesione sintomatica suscettibile di riparazione → considerare intervento precoce per ottimizzare le probabilità di successo",
+          "POTENZIAMENTO BIOLOGICO (opzione — evidenza limitata): venting del midollo osseo o PRP possono essere considerati per migliorare gli outcomes nella riparazione chirurgica di lesioni meniscali acute",
+        ],
+      },
+      {
+        title: "Trattamento Conservativo e Fisioterapia",
+        content: [
+          "FISIOTERAPIA (consenso): parte integrante dell'algoritmo terapeutico — sia come trattamento primario sia come recupero post-chirurgico",
+          "TRATTAMENTO CONSERVATIVO (opzione): per lesioni non displacate senza indicazione chirurgica immediata → fisioterapia/riabilitazione come opzione di prima linea",
+          "CONTENUTO DELLA FKT: rinforzo muscolare (quadricipite, femorali, stabilizzatori dell'anca), esercizi di controllo motorio, propriocezione, progressione funzionale verso l'attività sportiva",
+          "CRITERI DI FALLIMENTO CONSERVATIVO (opzione): pazienti con lesione acuta che falliscono il trattamento conservativo → la chirurgia entro 6 mesi migliora gli outcomes",
+          "RIABILITAZIONE POST-CHIRURGICA: fase di protezione (0-6 settimane, ROM limitato e carico progressivo) → rinforzo attivo → progressione funzionale → ritorno allo sport (4-7 mesi post-chirurgia)",
+          "NOTA: questa CPG è la prima a stabilire linee guida specifiche per le lesioni meniscali acute — il corpo di evidenza è relativamente limitato rispetto ad altre patologie ortopediche e sono necessarie ulteriori ricerche ad alto livello",
+        ],
+      },
+    ],
+  },
+];
+
+const COLORS = {
+  "Come Leggere le Guide":"#334155", Anca:"#1B4F8A", Ginocchio:"#0E6B5E", Spalla:"#5C3A8C",
+  Rachide:"#8B3A3A", Gomito:"#6B3A2E",
+  Traumatologia:"#7A6010", "Piede e Caviglia":"#1A6B5E", "Prescrizione Esercizio":"#2E6B8A", Geriatria:"#2E6B4F", "Mano e Polso":"#8A5A2B", Reumatologia:"#6B2D5C", "Salute Occupazionale":"#5A5A2E", Ematologia:"#8C2F39",
+};
+const CATS = ["Tutte",...new Set(guidelines.map(g=>g.category))];
+
+export default function OrthoGuide() {
+  const [sel, setSel] = useState(null);
+  const [search, setSearch] = useState("");
+  const [cat, setCat] = useState("Tutte");
+  const [open, setOpen] = useState({});
+  const [saved, setSaved] = useState([]);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sideOpen, setSideOpen] = useState(true);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const apply = (m) => { setIsMobile(m.matches); setSideOpen(!m.matches); };
+    apply(mq);
+    const onChange = (e) => apply(e);
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+
+  const filtered = useMemo(() => guidelines.filter(g => {
+    const q = search.toLowerCase();
+    const matchQ = !q || g.title.toLowerCase().includes(q) ||
+      g.tags.some(t=>t.includes(q)) || g.category.toLowerCase().includes(q);
+    const matchC = cat === "Tutte" || g.category === cat;
+    return matchQ && matchC;
+  }), [search, cat]);
+
+  const pick = (g) => {
+    setSel(g);
+    setOpen({});
+    if (isMobile) setSideOpen(false);
+  };
+  const toggleSec = (i) => setOpen(o => ({...o, [i]: !o[i]}));
+  const toggleSave = (id, e) => { e.stopPropagation(); setSaved(s => s.includes(id) ? s.filter(x=>x!==id) : [...s,id]); };
+  const expandAll = () => { if(!sel) return; const o={}; sel.sections.forEach((_,i)=>o[i]=true); setOpen(o); };
+  const collapseAll = () => setOpen({});
+
+  const c = sel ? COLORS[sel.category] : "#1e40af";
+
+  const S = {
+    app:{display:"flex",height:"100vh",fontFamily:"system-ui,sans-serif",background:"#f8fafc",overflow:"hidden"},
+    side:{width:isMobile?"100%":320,minWidth:isMobile?"100%":320,display:sideOpen?"flex":"none",flexDirection:"column",background:"#fff",borderRight:isMobile?"none":"1px solid #e2e8f0",overflow:"hidden"},
+    sideHead:{padding:"14px 16px",borderBottom:"1px solid #e2e8f0",background:"#1e3a5f",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10},
+    sideToggle:{flexShrink:0,border:"1px solid rgba(255,255,255,.3)",background:"rgba(255,255,255,.1)",color:"#fff",borderRadius:8,width:34,height:34,fontSize:16,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
+    openBar:{display:"flex",flexDirection:isMobile?"column":"row",alignItems:"center",gap:isMobile?6:10,padding:isMobile?"12px 16px":"10px 16px",borderBottom:"1px solid #e2e8f0",background:"#fff",position:"sticky",top:0,zIndex:5},
+    openBtn:{border:isMobile?"none":"1px solid #e2e8f0",background:isMobile?"#1e3a5f":"#f8fafc",color:isMobile?"#fff":"#1e3a5f",borderRadius:isMobile?12:8,padding:isMobile?"16px 20px":"8px 14px",fontSize:isMobile?17:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:isMobile?10:7,width:isMobile?"100%":"auto",boxShadow:isMobile?"0 3px 10px rgba(30,58,95,.28)":"none"},
+    logoRow:{display:"flex",alignItems:"center",gap:9},
+    logoImg:{height:26,width:"auto",flexShrink:0},
+    logo:{fontSize:19,fontWeight:700,color:"#fff",fontFamily:"Georgia,serif"},
+    poweredBy:{marginTop:6,fontSize:12,color:"#94a3b8",letterSpacing:.3},
+    poweredByStrong:{color:"#64748b",fontWeight:600},
+    welcomeBtn:{marginTop:26,border:"none",background:"#1e3a5f",color:"#fff",borderRadius:12,
+      padding:"16px 26px",fontSize:17,fontWeight:700,cursor:"pointer",display:"flex",
+      alignItems:"center",justifyContent:"center",gap:10,width:"100%",maxWidth:340,
+      boxShadow:"0 3px 10px rgba(30,58,95,.28)"},
+    logoSub:{fontSize:11,color:"#93c5fd",marginTop:2},
+    searchBox:{margin:"12px 0 8px",padding:"10px 12px",border:"1px solid #e2e8f0",borderRadius:8,fontSize:isMobile?16:13,outline:"none",width:"100%",boxSizing:"border-box"},
+    catBar:{display:"flex",gap:isMobile?7:5,padding:isMobile?"2px 16px 12px":"0 16px 10px",flexWrap:"wrap"},
+    catBtn:{padding:isMobile?"9px 15px":"6px 13px",borderRadius:20,border:"1px solid #e2e8f0",fontSize:isMobile?14:12.5,fontWeight:600,cursor:"pointer",background:"#f8fafc",color:"#64748b"},
+    catBtnA:{background:"#1e3a5f",color:"#fff",border:"1px solid #1e3a5f"},
+    list:{flex:1,overflowY:"auto",padding:"8px"},
+    card:{width:"100%",textAlign:"left",padding:"12px 14px",border:"1px solid #e2e8f0",borderRadius:10,marginBottom:8,cursor:"pointer",background:"#fff",transition:"all .15s"},
+    cardA:{borderColor:"#1e3a5f",background:"#f0f4ff"},
+    cardTop:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6},
+    pill:{padding:"2px 8px",borderRadius:12,fontSize:11,fontWeight:600},
+    cardTitle:{fontSize:13,fontWeight:600,color:"#1e293b",lineHeight:1.4,marginBottom:4},
+    cardSrc:{fontSize:11,color:"#94a3b8",marginBottom:6},
+    tags:{display:"flex",gap:4,flexWrap:"wrap"},
+    tag:{padding:"1px 6px",background:"#f1f5f9",color:"#64748b",borderRadius:6,fontSize:10},
+    main:{flex:1,overflow:"auto",display:(isMobile&&sideOpen)?"none":"flex",flexDirection:"column"},
+    welcome:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,color:"#94a3b8",gap:12,padding:40},
+    detailHead:{padding:isMobile?"16px 16px 14px":"24px 28px 16px",borderBottom:"1px solid #e2e8f0"},
+    metaRow:{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"},
+    srcTag:{fontSize:11,color:"#64748b",background:"#f1f5f9",padding:"3px 8px",borderRadius:6},
+    detailTitle:{fontSize:isMobile?19:22,fontWeight:700,color:"#1e293b",fontFamily:"Georgia,serif",margin:"0 0 8px"},
+    summary:{fontSize:14,color:"#475569",lineHeight:1.6,margin:"0 0 10px"},
+    toolbar:{display:"flex",gap:8,padding:isMobile?"10px 16px":"10px 28px",borderBottom:"1px solid #f1f5f9",background:"#fafafa"},
+    tbBtn:{padding:"6px 14px",borderRadius:8,border:"1px solid #e2e8f0",fontSize:12,cursor:"pointer",background:"#fff",color:"#475569"},
+    sections:{padding:isMobile?"12px 16px 40px":"16px 28px",display:"flex",flexDirection:"column",gap:8},
+    secBtn:{width:"100%",textAlign:"left",padding:"12px 16px",borderRadius:10,border:"1px solid #e2e8f0",background:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:14,fontWeight:600,color:"#1e293b"},
+    secContent:{padding:"12px 16px 16px",borderTop:"1px solid #f1f5f9"},
+    item:{display:"flex",gap:8,padding:"5px 0",alignItems:"flex-start"},
+    bullet:{width:6,height:6,borderRadius:"50%",marginTop:6,flexShrink:0},
+    itemText:{fontSize:13,color:"#374151",lineHeight:1.55},
+    saveBtn:{padding:"4px 12px",borderRadius:8,border:"1px solid",fontSize:12,cursor:"pointer",background:"transparent"},
+    bkm:{padding:"6px 8px",fontSize:13,cursor:"pointer",background:"none",border:"none",color:"#94a3b8"},
+    disclaimer:{fontSize:11,color:"#92400e",background:"#fffbeb",padding:"6px 12px",borderRadius:8,border:"1px solid #fde68a",margin:isMobile?"0 16px 12px":"0 28px 12px"},
+  };
+
+  return (
+    <div style={S.app}>
+      {/* SIDEBAR */}
+      <aside style={S.side}>
+        <div style={S.sideHead}>
+          <div>
+            <div style={S.logoRow}>
+              <img
+                src="orthobro-mark.png"
+                alt=""
+                style={S.logoImg}
+                onError={(e) => { e.target.style.display = "none"; }}
+              />
+              <span style={S.logo}>OrthoBro</span>
+            </div>
+            <div style={S.logoSub}>Linee Guida Ortopediche Evidence-Based</div>
+          </div>
+          <button
+            style={S.sideToggle}
+            onClick={() => setSideOpen(false)}
+            title={isMobile ? "Chiudi elenco" : "Nascondi barra laterale"}
+            aria-label="Nascondi elenco guide"
+          >
+            {isMobile ? "\u2715" : "\u2039"}
+          </button>
+        </div>
+        <div style={{padding:"12px 16px 0"}}>
+          <input
+            style={S.searchBox}
+            placeholder="🔍 Cerca guida..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+          />
+        </div>
+        <div style={S.catBar}>
+          {CATS.map(ct=>(
+            <button key={ct} style={{...S.catBtn,...(cat===ct?S.catBtnA:{})}} onClick={()=>setCat(ct)}>
+              {ct}
+            </button>
+          ))}
+        </div>
+        <div style={{padding:"0 16px 6px",fontSize:11,color:"#94a3b8"}}>
+          {filtered.length} {filtered.length===1?"risultato":"risultati"}
+        </div>
+        <div style={S.list}>
+          {filtered.map(g=>(
+            <button key={g.id} style={{...S.card,...(sel?.id===g.id?S.cardA:{})}} onClick={()=>pick(g)}>
+              <div style={S.cardTop}>
+                <span style={{...S.pill,background:COLORS[g.category]+"22",color:COLORS[g.category],border:`1px solid ${COLORS[g.category]}44`}}>
+                  {g.icon} {g.category}
+                </span>
+                <button style={S.bkm} onClick={e=>toggleSave(g.id,e)}>
+                  {saved.includes(g.id)?"🔖":"☆"}
+                </button>
+              </div>
+              <div style={S.cardTitle}>{g.title}</div>
+              <div style={S.cardSrc}>{g.source}</div>
+              <div style={S.tags}>{g.tags.map(t=><span key={t} style={S.tag}>{t}</span>)}</div>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      {/* MAIN */}
+      <main style={S.main}>
+        {!sideOpen && (!isMobile || sel) && (
+          <div style={S.openBar}>
+            <button style={S.openBtn} onClick={() => setSideOpen(true)}>
+              <span style={{fontSize:isMobile?20:15}}>{"\u2630"}</span>
+              {isMobile ? "Tutte le guide" : "Mostra elenco"}
+            </button>
+            {isMobile && sel && (
+              <span style={{fontSize:12,color:"#94a3b8",maxWidth:"100%",
+                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {sel.icon} {sel.category}
+              </span>
+            )}
+          </div>
+        )}
+        {!sel ? (
+          <div style={S.welcome}>
+            <img
+              src="orthobro-logo.png"
+              alt="Orthobro"
+              style={{width:isMobile?230:260,maxWidth:"78%",height:"auto",marginBottom:2}}
+              onError={(e) => { e.target.style.display = "none"; }}
+            />
+            <div style={{fontSize:14,textAlign:"center",maxWidth:320}}>
+              Seleziona una linea guida dalla lista per consultare le raccomandazioni cliniche evidence-based.
+            </div>
+            <div style={{fontSize:12,color:"#cbd5e1"}}>{guidelines.length} guide disponibili</div>
+            <div style={S.poweredBy}>
+              powered by <span style={S.poweredByStrong}>Powerphysio</span>
+            </div>
+            {!sideOpen && (
+              <button style={S.welcomeBtn} onClick={() => setSideOpen(true)}>
+                <span style={{fontSize:20}}>{"\u2630"}</span>
+                Tutte le guide
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div style={S.detailHead}>
+              <div style={S.metaRow}>
+                <span style={{...S.pill,background:c+"22",color:c,border:`1px solid ${c}44`,fontSize:13}}>
+                  {sel.icon} {sel.category}
+                </span>
+                <span style={S.srcTag}>{sel.source}</span>
+                <button
+                  style={{...S.saveBtn,color:saved.includes(sel.id)?c:"#94a3b8",borderColor:saved.includes(sel.id)?c:"#e2e8f0"}}
+                  onClick={e=>toggleSave(sel.id,e)}
+                >
+                  {saved.includes(sel.id)?"🔖 Salvato":"☆ Salva"}
+                </button>
+              </div>
+              <h1 style={S.detailTitle}>{sel.title}</h1>
+              <p style={S.summary}>{sel.summary}</p>
+              {sel.pdfUrl && (
+                <a
+                  href={sel.pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display:"inline-flex", alignItems:"center", gap:6,
+                    padding:"5px 12px", borderRadius:8, fontSize:12, fontWeight:600,
+                    background:c+"15", color:c, border:`1px solid ${c}40`,
+                    textDecoration:"none", marginBottom:6, marginRight:6,
+                  }}
+                >
+                  📄 Apri PDF / Fonte originale
+                </a>
+              )}
+              {sel.pdfUrl2 && (
+                <a
+                  href={sel.pdfUrl2}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display:"inline-flex", alignItems:"center", gap:6,
+                    padding:"5px 12px", borderRadius:8, fontSize:12, fontWeight:600,
+                    background:c+"15", color:c, border:`1px solid ${c}40`,
+                    textDecoration:"none", marginBottom:6,
+                  }}
+                >
+                  📄 Protocollo Riabilitativo
+                </a>
+              )}
+              <div style={S.tags}>{sel.tags.map(t=><span key={t} style={S.tag}>{t}</span>)}</div>
+            </div>
+
+            <div style={S.toolbar}>
+              <button style={S.tbBtn} onClick={expandAll}>▼ Espandi tutto</button>
+              <button style={S.tbBtn} onClick={collapseAll}>▲ Comprimi tutto</button>
+            </div>
+
+            <div style={S.disclaimer}>
+              ⚕️ Uso clinico — Verificare sempre con le fonti originali. Non sostituisce il giudizio clinico.
+              <div style={{marginTop:6,fontWeight:400,opacity:.9}}>
+                I nomi dei test clinici sottolineati (es. Phalen▶) aprono video dimostrativi su YouTube — serve la connessione.
+              </div>
+            </div>
+
+            <div style={S.sections}>
+              {sel.sections.map((sec,i)=>(
+                <div key={i} style={{borderRadius:10,border:`1px solid ${open[i]?c+"44":"#e2e8f0"}`,overflow:"hidden",background:"#fff"}}>
+                  <button
+                    style={{...S.secBtn,background:open[i]?c+"0a":"#fff",color:open[i]?c:"#1e293b"}}
+                    onClick={()=>toggleSec(i)}
+                  >
+                    <span>{sec.title}</span>
+                    <span style={{fontSize:12,transition:"transform .2s",transform:open[i]?"rotate(180deg)":"rotate(0)"}}>▼</span>
+                  </button>
+                  {open[i] && (
+                    <div style={S.secContent}>
+                      {sec.content.map((item,j)=>(
+                        <div key={j} style={S.item}>
+                          <span style={{...S.bullet,background:c}}/>
+                          <span style={S.itemText}>{withTestVideos(item,c)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
